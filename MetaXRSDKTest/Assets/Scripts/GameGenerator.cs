@@ -71,7 +71,7 @@ public class GameGenerator : MonoBehaviour
         }
     }
 
-    void RestartGame()
+    public void RestartGame()
     {
         // Lógica para reiniciar el juego
         CubeInteraction.cubesPlacedCorrectly = 0;
@@ -83,7 +83,7 @@ public class GameGenerator : MonoBehaviour
         GenerateGame();
     }
 
-    void CloseMessagePanel()
+    public void CloseMessagePanel()
     {
         // Ocultar el panel de mensajes sin reiniciar el juego
         if (warningPanel.activeSelf)  // Verifica si el WarningPanel está activo
@@ -106,9 +106,9 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            //ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
-            puzzleCompleted = true;
-            ShowMessageSuccess("¡Bien hecho! Has completado el puzzle. ¿Quieres jugar de nuevo?", Color.white, true);
+            ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
+            puzzleCompleted = false;
+            //ShowMessageSuccess("¡Bien hecho! Has completado el puzzle. ¿Quieres jugar de nuevo?", Color.white, true);
         }
     }
 
