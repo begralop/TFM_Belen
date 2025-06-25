@@ -85,16 +85,10 @@ public class GameGenerator : MonoBehaviour
 
     public void CloseMessagePanel()
     {
-        // Ocultar el panel de mensajes sin reiniciar el juego
-        if (warningPanel.activeSelf)  // Verifica si el WarningPanel está activo
-        {
-            warningPanel.SetActive(false);
-        }
-        else if (successPanel.activeSelf)  // Verifica si el SuccessPanel está activo
-        {
-            successPanel.SetActive(false);
-        }
 
+            warningPanel.SetActive(false);
+ 
+            successPanel.SetActive(false);
     }
 
     public void CheckPuzzleCompletion()
@@ -107,7 +101,7 @@ public class GameGenerator : MonoBehaviour
         else
         {
             ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
-            puzzleCompleted = false;
+            puzzleCompleted = true;
             //ShowMessageSuccess("¡Bien hecho! Has completado el puzzle. ¿Quieres jugar de nuevo?", Color.white, true);
         }
     }
@@ -135,8 +129,8 @@ public class GameGenerator : MonoBehaviour
             Vector3 targetPosition = GetMagnetPosition(row, col);
 
             // Verificación de alineación y orientación
-            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.05f &&
-                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 5.0f)
+            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.08f &&
+                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 10.0f)
             {
                 cube.transform.position = targetPosition;
                 cube.transform.rotation = Quaternion.identity;
@@ -160,7 +154,7 @@ public class GameGenerator : MonoBehaviour
         successPanel.SetActive(true);
         restartButtonSuccess.gameObject.SetActive(showRestartButtonSuccess);
         continueButtonSuccess.gameObject.SetActive(showRestartButtonSuccess);
-       // PositionPanel(successPanel);
+      //  PositionPanel(successPanel);
     }
 
     private void ShowMessageWarning(string message, Color color, bool showRestartButtonWarning)
@@ -169,8 +163,8 @@ public class GameGenerator : MonoBehaviour
         warningMessageText.color = color;
         warningPanel.SetActive(true);
         restartButtonWarning.gameObject.SetActive(showRestartButtonWarning);
-        continueButtonWarning.gameObject.SetActive(!showRestartButtonWarning);
-        //PositionPanel(warningPanel);
+        continueButtonWarning.gameObject.SetActive(showRestartButtonWarning);
+     //   PositionPanel(warningPanel);
     }
 
 
