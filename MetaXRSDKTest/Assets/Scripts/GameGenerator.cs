@@ -15,6 +15,8 @@ using TMPro;
 public class GameGenerator : MonoBehaviour
 
 {
+    private const string PlayerNameKey = "PlayerName";
+
 
     public GameObject cubePrefab;
 
@@ -28,7 +30,7 @@ public class GameGenerator : MonoBehaviour
 
     public Transform imagesPanel;
 
-
+    private GameObject selectPuzzle;
 
     private List<Vector3> magnetPositions = new List<Vector3>(); // Lista de posiciones de los imanes
 
@@ -53,7 +55,9 @@ public class GameGenerator : MonoBehaviour
     public Button continueButtonWarning;
 
     public Button restartButtonWarning;
+    public TextMeshProUGUI welcomeText;
 
+    public GameObject puzzlePanel;
 
 
 
@@ -92,7 +96,7 @@ public class GameGenerator : MonoBehaviour
 
         successPanel.SetActive(false);
 
-
+        selectPuzzle.SetActive(false);
 
         restartButtonSuccess.onClick.AddListener(RestartGame);
 
@@ -110,6 +114,20 @@ public class GameGenerator : MonoBehaviour
 
         ClearCurrentCubes();
 
+        // --- Paso 1: Comprobar que todo está conectado ---
+        if (welcomeText == null)
+        {
+            Debug.LogError("El campo de texto (welcomeText) no está asignado en el Inspector.");
+            return;
+        }
+
+        // --- Paso 2: Leer el nombre desde PlayerPrefs ---
+        // Si no encuentra ningún nombre guardado, usará "Invitado" como valor por defecto.
+        string playerName = PlayerPrefs.GetString(PlayerNameKey, "Invitado");
+
+        // --- Paso 3: Actualizar el texto en la pantalla ---
+        // Puedes cambiar el mensaje como más te guste.
+        welcomeText.text = $"Elige un puzzle {playerName}";
     }
 
 
