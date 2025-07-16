@@ -57,9 +57,6 @@ public class GameGenerator : MonoBehaviour
     public Button restartButtonWarning;
     public TextMeshProUGUI welcomeText;
 
-    public GameObject puzzlePanel;
-
-
 
 
     private bool puzzleCompleted = false; // Variable para controlar si el puzzle está completado
@@ -102,8 +99,6 @@ public class GameGenerator : MonoBehaviour
 
         restartButtonWarning.onClick.AddListener(RestartGame);
 
-
-
         continueButtonSuccess.onClick.AddListener(CloseMessagePanel);
 
         continueButtonWarning.onClick.AddListener(CloseMessagePanel);
@@ -113,13 +108,6 @@ public class GameGenerator : MonoBehaviour
         ClearCurrentMagnets();
 
         ClearCurrentCubes();
-
-        // --- Paso 1: Comprobar que todo está conectado ---
-        if (welcomeText == null)
-        {
-            Debug.LogError("El campo de texto (welcomeText) no está asignado en el Inspector.");
-            return;
-        }
 
         // --- Paso 2: Leer el nombre desde PlayerPrefs ---
         // Si no encuentra ningún nombre guardado, usará "Invitado" como valor por defecto.
