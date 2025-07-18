@@ -4,11 +4,16 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit;
 using TMPro;
-
+using UnityEngine.SceneManagement;
 public class GameGenerator : MonoBehaviour
 {
     // ELIMINADO: Ya no usamos esta clave directamente
     // private const string PlayerNameKey = "PlayerName";
+    [Header("Gestión de Sesión")]
+    [Tooltip("El botón que el usuario pulsará para cerrar sesión.")]
+    public Button logoutButton;
+    [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
+    public string loginSceneName;
 
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
@@ -44,6 +49,7 @@ public class GameGenerator : MonoBehaviour
 
     void Start()
     {
+
         // Asegúrate de que el panel esté desactivado al inicio
         warningPanel.SetActive(false);
         successPanel.SetActive(false);
@@ -53,17 +59,17 @@ public class GameGenerator : MonoBehaviour
         // puzzlePanel.SetActive(false); // Esta línea daba error si puzzlePanel no estaba asignado
         continueButtonSuccess.onClick.AddListener(CloseMessagePanel);
         continueButtonWarning.onClick.AddListener(CloseMessagePanel);
+        logoutButton.onClick.AddListener(Logout);
+
         // Desactivar inicialmente los imanes y cubos
         ClearCurrentMagnets();
         ClearCurrentCubes();
 
-        // --- LÓGICA ACTUALIZADA PARA MOSTRAR EL NOMBRE ---
+        // --- LÓGICA CORREGIDA PARA MOSTRAR EL NOMBRE ---
         if (welcomeText != null)
         {
-            // 1. Obtenemos el nombre del usuario actual desde nuestro UserManager
+            // Ahora llamamos a UserManager, que ya tendrá los datos cargados.
             string playerName = UserManager.GetCurrentUser();
-
-            // 2. Actualizamos el texto en la pantalla
             welcomeText.text = $"Elige un puzzle, {playerName}";
         }
         else
@@ -410,7 +416,24 @@ public class GameGenerator : MonoBehaviour
         otherPuzzleMaterials.Clear();
         GenerateMaterialsFromPanelImages();
     }
+    // --- MÉTODO NUEVO PARA CERRAR SESIÓN ---
+    public void Logout()
+    {
+        Debug.Log("Cerrando sesión...");
 
+        // 1. Limpiamos el usuario actual para que la próxima vez no se inicie sesión automáticamente.
+        UserManager.SetCurrentUser(null);
+
+        // 2. Comprobamos que el nombre de la escena de login está definido.
+        if (string.IsNullOrEmpty(loginSceneName))
+        {
+            Debug.LogError("El nombre de la escena de login (loginSceneName) no está especificado en el Inspector.");
+            return;
+        }
+
+        // 3. Cargamos la escena de login.
+        SceneManager.LoadScene(loginSceneName);
+    }
     void GenerateMaterialsFromPanelImages()
     {
         foreach (Transform child in imagesPanel)

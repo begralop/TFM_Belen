@@ -13,47 +13,61 @@ public class LoginControl : MonoBehaviour
     [SerializeField] public Button guestButton;
 
     [Header("Perfiles de Usuario")]
-    [SerializeField] private Transform userButtonsContainer;
+    [SerializeField] private Transform loginButtonsContainer;
+    [SerializeField] private Transform deleteButtonsContainer;
     [SerializeField] private GameObject userButtonPrefab;
 
     [Header("Navegación")]
     [SerializeField] private string sceneNameToLoad;
 
-    // Ya no necesitamos la referencia al panel de login, se gestiona solo
-
     void Start()
     {
-        // --- CAMBIO IMPORTANTE: Cargamos los datos directamente al inicio ---
-        UserManager.LoadData();
+        // ELIMINADO: Ya no necesitamos llamar a UserManager.LoadData() aquí.
 
         // El resto de la configuración
         continueButton.onClick.AddListener(ConfirmNameAndContinue);
         guestButton.onClick.AddListener(ContinueAsGuest);
         nameInputField.onValueChanged.AddListener(ValidateInput);
-        nameInputField.onSubmit.AddListener(OnInputSubmit);
         ValidateInput("");
 
-        // Llenamos la lista de usuarios guardados
-        PopulateUserList();
+        // Llenamos las listas de usuarios. UserManager ya habrá cargado los datos.
+        PopulateAllUserLists();
     }
 
-    private void PopulateUserList()
+    private void PopulateAllUserLists()
     {
-        foreach (Transform child in userButtonsContainer)
-        {
-            Destroy(child.gameObject);
-        }
+        foreach (Transform child in loginButtonsContainer) Destroy(child.gameObject);
+        foreach (Transform child in deleteButtonsContainer) Destroy(child.gameObject);
 
         List<string> users = UserManager.GetUsers();
-        Debug.Log($"Mostrando {users.Count} botones de usuario.");
+        Debug.Log($"Actualizando listas con {users.Count} usuarios.");
 
         foreach (string username in users)
         {
-            GameObject buttonGO = Instantiate(userButtonPrefab, userButtonsContainer);
-            buttonGO.name = $"Button_{username}";
-            buttonGO.GetComponentInChildren<TextMeshProUGUI>().text = username;
-            buttonGO.GetComponent<Button>().onClick.AddListener(() => LoginAsExistingUser(username));
+            // Crear botón para el panel de LOGIN
+            GameObject loginButtonGO = Instantiate(userButtonPrefab, loginButtonsContainer);
+            loginButtonGO.GetComponentInChildren<TextMeshProUGUI>().text = username;
+            loginButtonGO.GetComponent<Image>().color = GetColorForUsername(username);
+            loginButtonGO.GetComponent<Button>().onClick.AddListener(() => LoginAsExistingUser(username));
+
+            // Crear botón para el panel de BORRADO
+            GameObject deleteButtonGO = Instantiate(userButtonPrefab, deleteButtonsContainer);
+            deleteButtonGO.GetComponentInChildren<TextMeshProUGUI>().text = username;
+            deleteButtonGO.GetComponent<Image>().color = GetColorForUsername(username);
+            deleteButtonGO.GetComponent<Button>().onClick.AddListener(() => DeleteUserAndRefresh(username));
         }
+    }
+
+    private void DeleteUserAndRefresh(string username)
+    {
+        UserManager.DeleteUser(username);
+        PopulateAllUserLists();
+    }
+
+    private Color GetColorForUsername(string username)
+    {
+        Random.InitState(username.GetHashCode());
+        return new Color(Random.Range(0.4f, 1f), Random.Range(0.4f, 1f), Random.Range(0.4f, 1f));
     }
 
     private void ValidateInput(string text)
@@ -61,17 +75,8 @@ public class LoginControl : MonoBehaviour
         continueButton.interactable = !string.IsNullOrWhiteSpace(text);
     }
 
-    private void OnInputSubmit(string text)
-    {
-        if (continueButton.interactable)
-        {
-            ConfirmNameAndContinue();
-        }
-    }
-
     public void LoginAsExistingUser(string username)
     {
-        Debug.Log($"Iniciando sesión como usuario existente: {username}");
         UserManager.SetCurrentUser(username);
         LoadGameScene();
     }
