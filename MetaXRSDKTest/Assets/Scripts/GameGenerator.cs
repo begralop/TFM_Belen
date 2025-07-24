@@ -4,11 +4,15 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit;
 using TMPro;
-
+using UnityEngine.SceneManagement;
 public class GameGenerator : MonoBehaviour
 {
-    // ELIMINADO: Ya no usamos esta clave directamente
-    // private const string PlayerNameKey = "PlayerName";
+
+    [Header("Gestión de Sesión")]
+    [Tooltip("El botón que el usuario pulsará para cerrar sesión.")]
+    public Button logoutButton;
+    [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
+    public string loginSceneName;
 
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
@@ -56,6 +60,7 @@ public class GameGenerator : MonoBehaviour
         // Desactivar inicialmente los imanes y cubos
         ClearCurrentMagnets();
         ClearCurrentCubes();
+        logoutButton.onClick.AddListener(Logout);
 
         // --- LÓGICA ACTUALIZADA PARA MOSTRAR EL NOMBRE ---
         if (welcomeText != null)
@@ -96,7 +101,23 @@ public class GameGenerator : MonoBehaviour
         ClearCurrentCubes();
         GenerateGame();
     }
+    public void Logout()
+    {
+        Debug.Log("Cerrando sesión...");
 
+        // 1. Limpiamos el usuario actual para que la próxima vez no se inicie sesión automáticamente.
+        UserManager.SetCurrentUser(null);
+
+        // 2. Comprobamos que el nombre de la escena de login está definido.
+        if (string.IsNullOrEmpty(loginSceneName))
+        {
+            Debug.LogError("El nombre de la escena de login (loginSceneName) no está especificado en el Inspector.");
+            return;
+        }
+
+        // 3. Cargamos la escena de login.
+        SceneManager.LoadScene(loginSceneName);
+    }
     public void CloseMessagePanel()
     {
         warningPanel.SetActive(false);
