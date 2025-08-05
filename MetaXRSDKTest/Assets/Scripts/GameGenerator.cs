@@ -14,6 +14,14 @@ public class GameGenerator : MonoBehaviour
     [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
     public string loginSceneName;
 
+    [Header("Contador de Tiempo")]
+    public GameObject timerPanel;
+    public TextMeshProUGUI timerText;
+
+    private float elapsedTime = 0f;
+    private bool isTimerRunning = false;
+
+
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
     public GameObject tableCenterObject;
@@ -62,6 +70,7 @@ public class GameGenerator : MonoBehaviour
         ClearCurrentCubes();
         logoutButton.onClick.AddListener(Logout);
 
+
         // --- LÓGICA ACTUALIZADA PARA MOSTRAR EL NOMBRE ---
         if (welcomeText != null)
         {
@@ -79,6 +88,15 @@ public class GameGenerator : MonoBehaviour
 
     void Update()
     {
+        if (isTimerRunning)
+        {
+            elapsedTime += Time.deltaTime;
+            int minutes = Mathf.FloorToInt(elapsedTime / 60f);
+            int seconds = Mathf.FloorToInt(elapsedTime % 60f);
+            timerText.text = $"{minutes:00}:{seconds:00}";
+        }
+
+        // Ya existen estas líneas:
         if (successPanel.activeSelf)
         {
             // PositionPanel(successPanel);
@@ -88,6 +106,13 @@ public class GameGenerator : MonoBehaviour
         {
             // PositionPanel(warningPanel);
         }
+    }
+
+   public void StartTimer()
+    {
+        elapsedTime = 0f;
+        isTimerRunning = true;
+
     }
 
     public void RestartGame()
@@ -126,6 +151,7 @@ public class GameGenerator : MonoBehaviour
 
     public void CheckPuzzleCompletion()
     {
+        isTimerRunning = false; //  Detenemos el contador
         if (IsPuzzleComplete())
         {
             puzzleCompleted = true;
@@ -134,7 +160,7 @@ public class GameGenerator : MonoBehaviour
         else
         {
             ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
-            puzzleCompleted = true;
+            puzzleCompleted = false;
         }
     }
 
@@ -294,6 +320,7 @@ public class GameGenerator : MonoBehaviour
                         var magnet = Instantiate(magnetPrefab, magnetPositions[magnetIndex], Quaternion.identity);
                         magnet.tag = "refCube";
                         magnetIndex++;
+                        StartTimer();
                     }
                 }
             }
