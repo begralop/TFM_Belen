@@ -4,12 +4,23 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit;
 using TMPro;
-
+using UnityEngine.SceneManagement;
 public class GameGenerator : MonoBehaviour
 {
     // ELIMINADO: Ya no usamos esta clave directamente
     // private const string PlayerNameKey = "PlayerName";
+    [Header("Gestión de Sesión")]
+    [Tooltip("El botón que el usuario pulsará para cerrar sesión.")]
+    public Button logoutButton;
+    [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
+    public string loginSceneName;
 
+    [Header("Contador de Tiempo")]
+    public GameObject timerPanel;
+    public TextMeshProUGUI timerText;
+
+    private float elapsedTime = 0f;
+    private bool isTimerRunning = false;
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
     public GameObject tableCenterObject;
@@ -72,8 +83,26 @@ public class GameGenerator : MonoBehaviour
         }
     }
 
+    void StartTimer()
+    {
+        elapsedTime = 0f;
+        isTimerRunning = true;
+
+        if (timerPanel != null)
+            timerPanel.SetActive(true);
+    }
+
     void Update()
     {
+
+        if (isTimerRunning)
+        {
+            elapsedTime += Time.deltaTime;
+            int minutes = Mathf.FloorToInt(elapsedTime / 60f);
+            int seconds = Mathf.FloorToInt(elapsedTime % 60f);
+            timerText.text = $"{minutes:00}:{seconds:00}";
+        }
+
         if (successPanel.activeSelf)
         {
             // PositionPanel(successPanel);
@@ -85,10 +114,31 @@ public class GameGenerator : MonoBehaviour
         }
     }
 
+    public void Logout()
+    {
+        Debug.Log("Cerrando sesión...");
+
+        // 1. Limpiamos el usuario actual para que la próxima vez no se inicie sesión automáticamente.
+        UserManager.SetCurrentUser(null);
+
+        // 2. Comprobamos que el nombre de la escena de login está definido.
+        if (string.IsNullOrEmpty(loginSceneName))
+        {
+            Debug.LogError("El nombre de la escena de login (loginSceneName) no está especificado en el Inspector.");
+            return;
+        }
+
+        // 3. Cargamos la escena de login.
+        SceneManager.LoadScene(loginSceneName);
+    }
+
     public void RestartGame()
     {
         // Lógica para reiniciar el juego
         // CubeInteraction.cubesPlacedCorrectly = 0; // Esto puede dar error si no existe la clase
+        elapsedTime = 0f;
+        timerText.text = "00:00";
+        isTimerRunning = true;
         warningPanel.SetActive(false);
         successPanel.SetActive(false);
         puzzleCompleted = false;
@@ -105,6 +155,7 @@ public class GameGenerator : MonoBehaviour
 
     public void CheckPuzzleCompletion()
     {
+        isTimerRunning = false;
         if (IsPuzzleComplete())
         {
             puzzleCompleted = true;
@@ -273,6 +324,7 @@ public class GameGenerator : MonoBehaviour
                         var magnet = Instantiate(magnetPrefab, magnetPositions[magnetIndex], Quaternion.identity);
                         magnet.tag = "refCube";
                         magnetIndex++;
+                        StartTimer();
                     }
                 }
             }
