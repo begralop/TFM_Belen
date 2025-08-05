@@ -9,6 +9,18 @@ public class GameGenerator : MonoBehaviour
 {
     // ELIMINADO: Ya no usamos esta clave directamente
     // private const string PlayerNameKey = "PlayerName";
+    [Header("Gestión de Sesión")]
+    [Tooltip("El botón que el usuario pulsará para cerrar sesión.")]
+    public Button logoutButton;
+    [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
+    public string loginSceneName;
+
+    [Header("Contador de Tiempo")]
+    public GameObject timerPanel;
+    public TextMeshProUGUI timerText;
+
+    private float elapsedTime = 0f;
+    private bool isTimerRunning = false;
 
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
@@ -74,6 +86,14 @@ public class GameGenerator : MonoBehaviour
 
     void Update()
     {
+        if (isTimerRunning)
+        {
+            elapsedTime += Time.deltaTime;
+            int minutes = Mathf.FloorToInt(elapsedTime / 60f);
+            int seconds = Mathf.FloorToInt(elapsedTime % 60f);
+            timerText.text = $"{minutes:00}:{seconds:00}";
+        }
+
         if (successPanel.activeSelf)
         {
             // PositionPanel(successPanel);
@@ -89,6 +109,10 @@ public class GameGenerator : MonoBehaviour
     {
         // Lógica para reiniciar el juego
         // CubeInteraction.cubesPlacedCorrectly = 0; // Esto puede dar error si no existe la clase
+        elapsedTime = 0f;
+        timerText.text = "00:00";
+        isTimerRunning = true;
+
         warningPanel.SetActive(false);
         successPanel.SetActive(false);
         puzzleCompleted = false;
@@ -105,6 +129,8 @@ public class GameGenerator : MonoBehaviour
 
     public void CheckPuzzleCompletion()
     {
+        isTimerRunning = false;
+
         if (IsPuzzleComplete())
         {
             puzzleCompleted = true;
@@ -115,6 +141,12 @@ public class GameGenerator : MonoBehaviour
             ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
             puzzleCompleted = true;
         }
+    }
+
+    void StartTimer()
+    {
+        elapsedTime = 0f;
+        isTimerRunning = true;
     }
 
     private bool IsPuzzleComplete()
@@ -273,6 +305,7 @@ public class GameGenerator : MonoBehaviour
                         var magnet = Instantiate(magnetPrefab, magnetPositions[magnetIndex], Quaternion.identity);
                         magnet.tag = "refCube";
                         magnetIndex++;
+                        StartTimer();
                     }
                 }
             }
