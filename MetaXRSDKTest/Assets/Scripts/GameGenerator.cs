@@ -7,9 +7,10 @@ using TMPro;
 using UnityEngine.SceneManagement;
 public class GameGenerator : MonoBehaviour
 {
-
-    [Header("Gestión de Sesión")]
-    [Tooltip("El botón que el usuario pulsará para cerrar sesión.")]
+    // ELIMINADO: Ya no usamos esta clave directamente
+    // private const string PlayerNameKey = "PlayerName";
+    [Header("Gestiï¿½n de Sesiï¿½n")]
+    [Tooltip("El botï¿½n que el usuario pulsarï¿½ para cerrar sesiï¿½n.")]
     public Button logoutButton;
     [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
     public string loginSceneName;
@@ -21,12 +22,11 @@ public class GameGenerator : MonoBehaviour
     private float elapsedTime = 0f;
     private bool isTimerRunning = false;
 
-
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
     public GameObject tableCenterObject;
-    public List<Material> otherPuzzleMaterials;  // Lista de materiales genéricos para las otras caras
-    public Image selectedImage; // Esta será la imagen seleccionada cuando el usuario haga clic
+    public List<Material> otherPuzzleMaterials;  // Lista de materiales genï¿½ricos para las otras caras
+    public Image selectedImage; // Esta serï¿½ la imagen seleccionada cuando el usuario haga clic
     public Transform imagesPanel;
     private GameObject selectPuzzle;
     private List<Vector3> magnetPositions = new List<Vector3>(); // Lista de posiciones de los imanes
@@ -34,35 +34,35 @@ public class GameGenerator : MonoBehaviour
 
     public GameObject warningPanel;
     public GameObject successPanel;
-    public TextMeshProUGUI successMessageText; // Para el panel de éxito
+    public TextMeshProUGUI successMessageText; // Para el panel de ï¿½xito
     public TextMeshProUGUI warningMessageText; // Para el panel de advertencia    
-    public Button playButton; // Botón de Play
+    public Button playButton; // Botï¿½n de Play
     public Button continueButtonSuccess;
     public Button restartButtonSuccess;
     public Button continueButtonWarning;
     public Button restartButtonWarning;
     public TextMeshProUGUI welcomeText;
 
-    private bool puzzleCompleted = false; // Variable para controlar si el puzzle está completado
+    private bool puzzleCompleted = false; // Variable para controlar si el puzzle estï¿½ completado
 
-    public float cubeSize = 0.1f; // Tamaño del cubo, ajustar según sea necesario
-    public float magnetHeightOffset = 0.005f; // Altura adicional para que solo la parte roja del imán sea visible
+    public float cubeSize = 0.1f; // Tamaï¿½o del cubo, ajustar segï¿½n sea necesario
+    public float magnetHeightOffset = 0.005f; // Altura adicional para que solo la parte roja del imï¿½n sea visible
 
     public int rows;
     public int columns;
 
-    private Vector3 initialSuccessPanelPosition; // Posición inicial del panel de éxito
-    private Vector3 initialWarningPanelPosition; // Posición inicial del panel de advertencia
+    private Vector3 initialSuccessPanelPosition; // Posiciï¿½n inicial del panel de ï¿½xito
+    private Vector3 initialWarningPanelPosition; // Posiciï¿½n inicial del panel de advertencia
 
     void Start()
     {
-        // Asegúrate de que el panel esté desactivado al inicio
+        // Asegï¿½rate de que el panel estï¿½ desactivado al inicio
         warningPanel.SetActive(false);
         successPanel.SetActive(false);
-        // selectPuzzle.SetActive(false); // Esta línea daba error si selectPuzzle no estaba asignado
+        // selectPuzzle.SetActive(false); // Esta lï¿½nea daba error si selectPuzzle no estaba asignado
         restartButtonSuccess.onClick.AddListener(RestartGame);
         restartButtonWarning.onClick.AddListener(RestartGame);
-        // puzzlePanel.SetActive(false); // Esta línea daba error si puzzlePanel no estaba asignado
+        // puzzlePanel.SetActive(false); // Esta lï¿½nea daba error si puzzlePanel no estaba asignado
         continueButtonSuccess.onClick.AddListener(CloseMessagePanel);
         continueButtonWarning.onClick.AddListener(CloseMessagePanel);
         // Desactivar inicialmente los imanes y cubos
@@ -71,7 +71,7 @@ public class GameGenerator : MonoBehaviour
         logoutButton.onClick.AddListener(Logout);
 
 
-        // --- LÓGICA ACTUALIZADA PARA MOSTRAR EL NOMBRE ---
+        // --- Lï¿½GICA ACTUALIZADA PARA MOSTRAR EL NOMBRE ---
         if (welcomeText != null)
         {
             // 1. Obtenemos el nombre del usuario actual desde nuestro UserManager
@@ -82,7 +82,7 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("La referencia a 'welcomeText' no está asignada en el Inspector.");
+            Debug.LogWarning("La referencia a 'welcomeText' no estï¿½ asignada en el Inspector.");
         }
     }
 
@@ -96,7 +96,6 @@ public class GameGenerator : MonoBehaviour
             timerText.text = $"{minutes:00}:{seconds:00}";
         }
 
-        // Ya existen estas líneas:
         if (successPanel.activeSelf)
         {
             // PositionPanel(successPanel);
@@ -117,8 +116,12 @@ public class GameGenerator : MonoBehaviour
 
     public void RestartGame()
     {
-        // Lógica para reiniciar el juego
+        // Lï¿½gica para reiniciar el juego
         // CubeInteraction.cubesPlacedCorrectly = 0; // Esto puede dar error si no existe la clase
+        elapsedTime = 0f;
+        timerText.text = "00:00";
+        isTimerRunning = true;
+
         warningPanel.SetActive(false);
         successPanel.SetActive(false);
         puzzleCompleted = false;
@@ -128,15 +131,15 @@ public class GameGenerator : MonoBehaviour
     }
     public void Logout()
     {
-        Debug.Log("Cerrando sesión...");
+        Debug.Log("Cerrando sesiï¿½n...");
 
-        // 1. Limpiamos el usuario actual para que la próxima vez no se inicie sesión automáticamente.
+        // 1. Limpiamos el usuario actual para que la prï¿½xima vez no se inicie sesiï¿½n automï¿½ticamente.
         UserManager.SetCurrentUser(null);
 
-        // 2. Comprobamos que el nombre de la escena de login está definido.
+        // 2. Comprobamos que el nombre de la escena de login estï¿½ definido.
         if (string.IsNullOrEmpty(loginSceneName))
         {
-            Debug.LogError("El nombre de la escena de login (loginSceneName) no está especificado en el Inspector.");
+            Debug.LogError("El nombre de la escena de login (loginSceneName) no estï¿½ especificado en el Inspector.");
             return;
         }
 
@@ -151,17 +154,24 @@ public class GameGenerator : MonoBehaviour
 
     public void CheckPuzzleCompletion()
     {
-        isTimerRunning = false; //  Detenemos el contador
+        isTimerRunning = false;
+
         if (IsPuzzleComplete())
         {
             puzzleCompleted = true;
-            ShowMessageSuccess("¡Bien hecho! Has completado el puzzle. ¿Quieres jugar de nuevo?", Color.white, true);
+            ShowMessageSuccess("ï¿½Bien hecho! Has completado el puzzle. ï¿½Quieres jugar de nuevo?", Color.white, true);
         }
         else
         {
-            ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
+            ShowMessageWarning("ï¿½Intï¿½ntalo de nuevo!  No has completado el puzzle correctamente. ï¿½Quieres seguir intentï¿½ndolo?\"", Color.white, true);
             puzzleCompleted = false;
         }
+    }
+
+    void StartTimer()
+    {
+        elapsedTime = 0f;
+        isTimerRunning = true;
     }
 
     private bool IsPuzzleComplete()
@@ -180,7 +190,7 @@ public class GameGenerator : MonoBehaviour
             int row, col;
             if (!int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
             {
-                Debug.LogError($"No se pudieron parsear los índices de la cuadrícula desde el nombre del cubo: {cube.name}");
+                Debug.LogError($"No se pudieron parsear los ï¿½ndices de la cuadrï¿½cula desde el nombre del cubo: {cube.name}");
                 return false;
             }
 
@@ -195,7 +205,7 @@ public class GameGenerator : MonoBehaviour
             }
             else
             {
-                Debug.Log($"Cubo {cube.name} no está alineado correctamente.");
+                Debug.Log($"Cubo {cube.name} no estï¿½ alineado correctamente.");
                 return false;
             }
         }
@@ -403,7 +413,7 @@ public class GameGenerator : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogError("No se pudo cargar el prefab de imán.");
+                    Debug.LogError("No se pudo cargar el prefab de imï¿½n.");
                 }
             }
         }
@@ -447,7 +457,7 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            Debug.LogError("La posición del imán está fuera de los límites.");
+            Debug.LogError("La posiciï¿½n del imï¿½n estï¿½ fuera de los lï¿½mites.");
             return Vector3.zero;
         }
     }
@@ -475,7 +485,7 @@ public class GameGenerator : MonoBehaviour
                         Texture2D texture = SpriteToTexture2D(img.sprite);
                         Material[] materials = DivideImageIntoMaterials(texture, rows, columns);
                         otherPuzzleMaterials.AddRange(materials);
-                        Debug.Log("Imagen añadida a otherPuzzleMaterials: " + img.sprite.name);
+                        Debug.Log("Imagen aï¿½adida a otherPuzzleMaterials: " + img.sprite.name);
                     }
                     else
                     {
@@ -484,12 +494,12 @@ public class GameGenerator : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogWarning("No se encontró 'Background' en " + child.name);
+                    Debug.LogWarning("No se encontrï¿½ 'Background' en " + child.name);
                 }
             }
             else
             {
-                Debug.LogWarning("No se encontró 'Content' en " + child.name);
+                Debug.LogWarning("No se encontrï¿½ 'Content' en " + child.name);
             }
         }
         Debug.Log("Total de materiales generados: " + otherPuzzleMaterials.Count);
