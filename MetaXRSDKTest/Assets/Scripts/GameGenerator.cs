@@ -521,12 +521,6 @@ public class GameGenerator : MonoBehaviour
         {
             timerText.text = "00:00";
         }
-
-        // Opcionalmente, ocultamos el panel del temporizador hasta que empiece la partida de nuevo.
-        if (timerPanel != null)
-        {
-            timerPanel.SetActive(false);
-        }
         // --- FIN: LÓGICA AÑADIDA ---
 
         selectedImage = image;
