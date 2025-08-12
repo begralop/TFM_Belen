@@ -21,26 +21,39 @@ public class GameGenerator : MonoBehaviour
 
     private float elapsedTime = 0f;
     private bool isTimerRunning = false;
+
+    // --- VARIABLES DE UI UNIFICADAS ---
+    [Header("Panel de Resultado")]
+    [Tooltip("El panel que aparecerá al final del puzle.")]
+    public GameObject resultPanel;
+    [Tooltip("El texto para el mensaje principal (éxito o advertencia).")]
+    public TextMeshProUGUI resultMessageText;
+    [Tooltip("El botón para continuar o cerrar el panel.")]
+    public Button continueButton;
+    [Tooltip("El botón para reiniciar la partida.")]
+    public Button restartButton;
+
+
+
+    [Header("Configuración del Puzle")]
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
     public GameObject tableCenterObject;
     public List<Material> otherPuzzleMaterials;  // Lista de materiales genéricos para las otras caras
     public Image selectedImage; // Esta será la imagen seleccionada cuando el usuario haga clic
     public Transform imagesPanel;
+
+
+
+
     private GameObject selectPuzzle;
     private List<Vector3> magnetPositions = new List<Vector3>(); // Lista de posiciones de los imanes
     private GridCreator gridCreator;
-
-    public GameObject warningPanel;
-    public GameObject successPanel;
-    public TextMeshProUGUI successMessageText; // Para el panel de éxito
-    public TextMeshProUGUI warningMessageText; // Para el panel de advertencia    
     public Button playButton; // Botón de Play
-    public Button continueButtonSuccess;
-    public Button restartButtonSuccess;
-    public Button continueButtonWarning;
-    public Button restartButtonWarning;
     public TextMeshProUGUI welcomeText;
+
+
+
 
     private bool puzzleCompleted = false; // Variable para controlar si el puzzle está completado
 
@@ -56,14 +69,14 @@ public class GameGenerator : MonoBehaviour
     void Start()
     {
         // Asegúrate de que el panel esté desactivado al inicio
-        warningPanel.SetActive(false);
-        successPanel.SetActive(false);
+        resultPanel.SetActive(false);
+
+
+
         // selectPuzzle.SetActive(false); // Esta línea daba error si selectPuzzle no estaba asignado
-        restartButtonSuccess.onClick.AddListener(RestartGame);
-        restartButtonWarning.onClick.AddListener(RestartGame);
-        // puzzlePanel.SetActive(false); // Esta línea daba error si puzzlePanel no estaba asignado
-        continueButtonSuccess.onClick.AddListener(CloseMessagePanel);
-        continueButtonWarning.onClick.AddListener(CloseMessagePanel);
+        restartButton.onClick.AddListener(RestartGame);
+        continueButton.onClick.AddListener(ContinueGameAfterWarning);
+
         // Desactivar inicialmente los imanes y cubos
         ClearCurrentMagnets();
         ClearCurrentCubes();
@@ -102,16 +115,6 @@ public class GameGenerator : MonoBehaviour
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
             timerText.text = $"{minutes:00}:{seconds:00}";
         }
-
-        if (successPanel.activeSelf)
-        {
-            // PositionPanel(successPanel);
-        }
-
-        if (warningPanel.activeSelf)
-        {
-            // PositionPanel(warningPanel);
-        }
     }
 
     public void Logout()
@@ -132,40 +135,70 @@ public class GameGenerator : MonoBehaviour
         SceneManager.LoadScene(loginSceneName);
     }
 
+    private void ShowResult(bool isSuccess)
+    {
+        resultPanel.SetActive(true);
+
+        // Limpiamos listeners anteriores para evitar que se acumulen
+        continueButton.onClick.RemoveAllListeners();
+
+        if (isSuccess)
+        {
+            // Puzle completado con éxito
+            resultMessageText.text = "¡Bien hecho! Has completado el puzle. ¿Quieres jugar de nuevo?";
+            // Al pulsar 'Continuar', solo cerramos el panel
+            continueButton.onClick.AddListener(CloseResultPanel);
+            restartButton.onClick.AddListener(RestartGame);
+            // Guardamos la puntuación: usuario actual, nombre del sprite del puzle y tiempo transcurrido.
+            UserManager.AddScore(UserManager.GetCurrentUser(), selectedImage.sprite.name, elapsedTime);
+
+        }
+        else
+        {
+            // Puzle incorrecto
+            resultMessageText.text = "No has completado el puzle correctamente. ¿Quieres seguir intentándolo?";
+            // Al pulsar 'Continuar', cerramos el panel Y reanudamos el tiempo
+            continueButton.onClick.AddListener(ContinueGameAfterWarning);
+            restartButton.onClick.AddListener(RestartGame);
+        }
+    }
+
+    public void CloseResultPanel()
+    {
+        resultPanel.SetActive(false);
+    }
+
+    public void ContinueGameAfterWarning()
+    {
+        resultPanel.SetActive(false);
+        isTimerRunning = true; // Reanuda el contador
+    }
+
     public void RestartGame()
     {
+        resultPanel.SetActive(false);
         // Lógica para reiniciar el juego
-        // CubeInteraction.cubesPlacedCorrectly = 0; // Esto puede dar error si no existe la clase
+        CubeInteraction.cubesPlacedCorrectly = 0; // Esto puede dar error si no existe la clase
         elapsedTime = 0f;
         timerText.text = "00:00";
         isTimerRunning = true;
-        warningPanel.SetActive(false);
-        successPanel.SetActive(false);
         puzzleCompleted = false;
+
         ClearCurrentMagnets();
         ClearCurrentCubes();
         GenerateGame();
     }
 
-    public void CloseMessagePanel()
-    {
-        warningPanel.SetActive(false);
-        successPanel.SetActive(false);
-    }
-
     public void CheckPuzzleCompletion()
     {
+        // 1. Detenemos el tiempo
         isTimerRunning = false;
-        if (IsPuzzleComplete())
-        {
-            puzzleCompleted = true;
-            ShowMessageSuccess("¡Bien hecho! Has completado el puzzle. ¿Quieres jugar de nuevo?", Color.white, true);
-        }
-        else
-        {
-            ShowMessageWarning("¡Inténtalo de nuevo!  No has completado el puzzle correctamente. ¿Quieres seguir intentándolo?\"", Color.white, true);
-            puzzleCompleted = true;
-        }
+
+        // 2. Comprobamos si el puzle está bien resuelto
+        bool puzzleEsCorrecto = IsPuzzleComplete();
+
+        // 3. Llamamos a nuestro nuevo método unificado para mostrar el resultado
+        ShowResult(puzzleEsCorrecto);
     }
 
     private bool IsPuzzleComplete()
@@ -190,8 +223,9 @@ public class GameGenerator : MonoBehaviour
 
             Vector3 targetPosition = GetMagnetPosition(row, col);
 
-            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.08f &&
-                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 10.0f)
+            // Verificación de alineación y orientación
+            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.1f &&
+                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 5.0f)
             {
                 cube.transform.position = targetPosition;
                 cube.transform.rotation = Quaternion.identity;
@@ -203,56 +237,52 @@ public class GameGenerator : MonoBehaviour
                 return false;
             }
         }
+
         return true;
     }
 
-    private void ShowMessageSuccess(string message, Color color, bool showRestartButtonSuccess)
-    {
-        successMessageText.text = message;
-        successMessageText.color = color;
-        successPanel.SetActive(true);
-        restartButtonSuccess.gameObject.SetActive(showRestartButtonSuccess);
-        continueButtonSuccess.gameObject.SetActive(showRestartButtonSuccess);
-    }
-
-    private void ShowMessageWarning(string message, Color color, bool showRestartButtonWarning)
-    {
-        warningMessageText.text = message;
-        warningMessageText.color = color;
-        warningPanel.SetActive(true);
-        restartButtonWarning.gameObject.SetActive(showRestartButtonWarning);
-        continueButtonWarning.gameObject.SetActive(showRestartButtonWarning);
-    }
 
     void PositionPanel(GameObject panel)
     {
+        // Asegurarse de que el centro de la mesa está asignado
         if (tableCenterObject == null)
         {
             Debug.LogError("No se ha asignado un objeto de referencia para el centro de la mesa.");
             return;
         }
 
+        // Calcular el centro de la cuadrícula de imanes
         Vector3 tableCenter = tableCenterObject.transform.position;
         float puzzleWidth = gridCreator.columns * cubeSize;
         float puzzleHeight = gridCreator.rows * cubeSize;
 
+        // Obtener la posición central de la cuadrícula
         Vector3 puzzleCenter = new Vector3(
             tableCenter.x,
-            tableCenter.y + magnetHeightOffset,
+            tableCenter.y + magnetHeightOffset,  // Altura de los imanes
             tableCenter.z
         );
 
-        float panelHeightOffset = 0.2f;
+        // Añadir un offset vertical para que el panel aparezca justo encima de los imanes
+        float panelHeightOffset = 0.2f;  // Ajustar la altura del panel por encima de los imanes
         Vector3 panelPosition = new Vector3(
             puzzleCenter.x,
-            puzzleCenter.y + panelHeightOffset,
+            puzzleCenter.y + panelHeightOffset, // Elevar el panel por encima de los imanes
             puzzleCenter.z
         );
 
+        // Posicionar el panel
         panel.transform.position = panelPosition;
+
+        // Asegurarse de que el panel está mirando hacia la cámara
         panel.transform.LookAt(Camera.main.transform);
+
+        // Ajustar la rotación en el eje Y si es necesario para que el panel esté completamente de frente
         panel.transform.rotation = Quaternion.Euler(0, panel.transform.rotation.eulerAngles.y, 0);
+
+        // Escalar el panel si es necesario
         panel.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+
     }
 
     void GenerateGame()
@@ -314,7 +344,7 @@ public class GameGenerator : MonoBehaviour
                             }
                             cube.name = $"Cube_{r}_{c}";
                             var interactable = cube.AddComponent<XRGrabInteractable>();
-                            // cube.AddComponent<CubeInteraction>(); // Puede dar error si la clase no existe
+                            cube.AddComponent<CubeInteraction>();
                         }
                         else
                         {
