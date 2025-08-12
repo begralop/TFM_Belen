@@ -511,6 +511,24 @@ public class GameGenerator : MonoBehaviour
 
     public void OnImageSelected(Image image)
     {
+        // --- INICIO: LÓGICA AÑADIDA PARA REINICIAR EL TEMPORIZADOR ---
+        // Cuando el usuario elige una imagen nueva, reseteamos el temporizador.
+        elapsedTime = 0f;
+        isTimerRunning = false;
+
+        // Actualizamos el texto para que muestre "00:00"
+        if (timerText != null)
+        {
+            timerText.text = "00:00";
+        }
+
+        // Opcionalmente, ocultamos el panel del temporizador hasta que empiece la partida de nuevo.
+        if (timerPanel != null)
+        {
+            timerPanel.SetActive(false);
+        }
+        // --- FIN: LÓGICA AÑADIDA ---
+
         selectedImage = image;
         otherPuzzleMaterials.Clear();
         GenerateMaterialsFromPanelImages();
