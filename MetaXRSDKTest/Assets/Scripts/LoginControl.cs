@@ -47,13 +47,11 @@ public class LoginControl : MonoBehaviour
             // Crear botón para el panel de LOGIN
             GameObject loginButtonGO = Instantiate(userButtonPrefab, loginButtonsContainer);
             loginButtonGO.GetComponentInChildren<TextMeshProUGUI>().text = username;
-            loginButtonGO.GetComponent<Image>().color = GetColorForUsername(username);
             loginButtonGO.GetComponent<Button>().onClick.AddListener(() => LoginAsExistingUser(username));
 
             // Crear botón para el panel de BORRADO
             GameObject deleteButtonGO = Instantiate(userButtonPrefab, deleteButtonsContainer);
             deleteButtonGO.GetComponentInChildren<TextMeshProUGUI>().text = username;
-            deleteButtonGO.GetComponent<Image>().color = GetColorForUsername(username);
             deleteButtonGO.GetComponent<Button>().onClick.AddListener(() => DeleteUserAndRefresh(username));
         }
     }

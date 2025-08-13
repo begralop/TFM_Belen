@@ -52,7 +52,7 @@ public class GameGenerator : MonoBehaviour
     public TextMeshProUGUI welcomeText;
 
 
-
+    private int placedCubesCount = 0;
 
     private bool puzzleCompleted = false; // Variable para controlar si el puzzle est� completado
 
@@ -202,7 +202,7 @@ public class GameGenerator : MonoBehaviour
     {
         resultPanel.SetActive(false);
         // L�gica para reiniciar el juego
-        CubeInteraction.cubesPlacedCorrectly = 0; // Esto puede dar error si no existe la clase
+        placedCubesCount = 0; // Esto puede dar error si no existe la clase
         elapsedTime = 0f;
         timerText.text = "00:00";
         isTimerRunning = true;
@@ -213,12 +213,26 @@ public class GameGenerator : MonoBehaviour
         GenerateGame();
     }
 
+    public void OnCubePlaced()
+    {
+        placedCubesCount++;
+        if (placedCubesCount >= (rows * columns))
+        {
+            StartDelayedCheck();
+        }
+    }
+
+    public void OnCubeRemoved()
+    {
+        placedCubesCount--;
+    }
+
     public void CheckPuzzleCompletion()
     {
         // 1. Detenemos el tiempo
         isTimerRunning = false;
 
-        // 2. Comprobamos si el puzle est� bien resuelto
+        // 2. Comprobamos si el puzle esta bien resuelto
         bool puzzleEsCorrecto = IsPuzzleComplete();
 
         // 3. Llamamos a nuestro nuevo m�todo unificado para mostrar el resultado
@@ -241,31 +255,23 @@ public class GameGenerator : MonoBehaviour
             int row, col;
             if (!int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
             {
-                Debug.LogError($"No se pudieron parsear los �ndices de la cuadr�cula desde el nombre del cubo: {cube.name}");
+                Debug.LogError($"No se pudieron parsear los índices de la cuadrícula desde el nombre del cubo: {cube.name}");
                 return false;
             }
+
             Vector3 targetPosition = GetMagnetPosition(row, col);
 
-            // --- INICIO DE LA CORRECCIÓN ---
-
-            // 1. Comprobación de Posición: ¿Está el cubo cerca de su sitio?
-            bool isPositionCorrect = Vector3.Distance(cube.transform.position, targetPosition) <= 0.1f;
-
-            // 2. Comprobación de Orientación: ¿La cara del puzle mira hacia arriba?
-            //    Vector3.up es la dirección (0, 1, 0). transform.up es la dirección "hacia arriba" local del cubo.
-            //    Un producto escalar > 0.99f significa que están alineados casi perfectamente.
-            bool isOrientationCorrect = Vector3.Dot(cube.transform.up, Vector3.up) > 0.99f;
-
-            if (isPositionCorrect && isOrientationCorrect)
+            // Verificación de alineación y orientación
+            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.1f &&
+                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 15.0f)
             {
-                // El cubo está bien. Forzamos su posición final para un acabado perfecto.
                 cube.transform.position = targetPosition;
-                Debug.Log($"Cubo {cube.name} está alineado correctamente.");
+                cube.transform.rotation = Quaternion.identity;
+                Debug.Log($"Cubo {cube.name} alineado correctamente.");
             }
             else
             {
-                // Si una sola pieza falla, el puzle entero es incorrecto.
-                Debug.Log($"Cubo {cube.name} NO está alineado. PosiciónOK={isPositionCorrect}, OrientaciónOK={isOrientationCorrect}");
+                Debug.Log($"Cubo {cube.name} no está alineado correctamente.");
                 return false;
             }
         }
