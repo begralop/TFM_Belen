@@ -39,7 +39,7 @@ public class CubeInteraction : MonoBehaviour
             if (cubesPlacedCorrectly == totalCubes && gameGenerator != null)
             {
                 Debug.Log("Puzzle completado. Verificando...");
-                gameGenerator.CheckPuzzleCompletion();
+                gameGenerator.StartDelayedCheck();
             }
         }
     }

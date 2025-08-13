@@ -28,9 +28,9 @@ public class GameGenerator : MonoBehaviour
     public GameObject resultPanel;
     [Tooltip("El texto para el mensaje principal (�xito o advertencia).")]
     public TextMeshProUGUI resultMessageText;
-    [Tooltip("El bot�n para continuar o cerrar el panel.")]
+    [Tooltip("El boton para continuar o cerrar el panel.")]
     public Button continueButton;
-    [Tooltip("El bot�n para reiniciar la partida.")]
+    [Tooltip("El boton para reiniciar la partida.")]
     public Button restartButton;
 
 
@@ -89,7 +89,7 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("La referencia a 'welcomeText' no est� asignada en el Inspector.");
+            Debug.LogWarning("La referencia a 'welcomeText' no esta asignada en el Inspector.");
         }
     }
 
@@ -116,7 +116,7 @@ public class GameGenerator : MonoBehaviour
 
     public void Logout()
     {
-        Debug.Log("Cerrando sesi�n...");
+        Debug.Log("Cerrando sesion...");
 
         // 1. Limpiamos el usuario actual para que la pr�xima vez no se inicie sesi�n autom�ticamente.
         UserManager.SetCurrentUser(null);
@@ -124,7 +124,7 @@ public class GameGenerator : MonoBehaviour
         // 2. Comprobamos que el nombre de la escena de login est� definido.
         if (string.IsNullOrEmpty(loginSceneName))
         {
-            Debug.LogError("El nombre de la escena de login (loginSceneName) no est� especificado en el Inspector.");
+            Debug.LogError("El nombre de la escena de login (loginSceneName) no esta especificado en el Inspector.");
             return;
         }
 
@@ -146,7 +146,7 @@ public class GameGenerator : MonoBehaviour
         if (isSuccess)
         {
             // Puzle completado con �xito
-            resultMessageText.text = "�Bien hecho! Has completado el puzle. �Quieres jugar de nuevo?";
+            resultMessageText.text = "�Bien hecho! Has completado el puzle. ¿Quieres jugar de nuevo?";
             // Al pulsar 'Continuar', solo cerramos el panel
             continueButton.onClick.AddListener(CloseResultPanel);
             // Guardamos la puntuaci�n: usuario actual, nombre del sprite del puzle y tiempo transcurrido.
@@ -156,7 +156,7 @@ public class GameGenerator : MonoBehaviour
         else
         {
             // Puzle incorrecto
-            resultMessageText.text = "No has completado el puzle correctamente. �Quieres seguir intent�ndolo?";
+            resultMessageText.text = "No has completado el puzle correctamente. ¿Quieres seguir intentándolo?";
             // Al pulsar 'Continuar', cerramos el panel Y reanudamos el tiempo
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
@@ -244,25 +244,49 @@ public class GameGenerator : MonoBehaviour
                 Debug.LogError($"No se pudieron parsear los �ndices de la cuadr�cula desde el nombre del cubo: {cube.name}");
                 return false;
             }
-
             Vector3 targetPosition = GetMagnetPosition(row, col);
 
-            // Verificaci�n de alineaci�n y orientaci�n
-            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.1f &&
-                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 5.0f)
+            // --- INICIO DE LA CORRECCIÓN ---
+
+            // 1. Comprobación de Posición: ¿Está el cubo cerca de su sitio?
+            bool isPositionCorrect = Vector3.Distance(cube.transform.position, targetPosition) <= 0.1f;
+
+            // 2. Comprobación de Orientación: ¿La cara del puzle mira hacia arriba?
+            //    Vector3.up es la dirección (0, 1, 0). transform.up es la dirección "hacia arriba" local del cubo.
+            //    Un producto escalar > 0.99f significa que están alineados casi perfectamente.
+            bool isOrientationCorrect = Vector3.Dot(cube.transform.up, Vector3.up) > 0.99f;
+
+            if (isPositionCorrect && isOrientationCorrect)
             {
+                // El cubo está bien. Forzamos su posición final para un acabado perfecto.
                 cube.transform.position = targetPosition;
-                cube.transform.rotation = Quaternion.identity;
-                Debug.Log($"Cubo {cube.name} alineado correctamente.");
+                Debug.Log($"Cubo {cube.name} está alineado correctamente.");
             }
             else
             {
-                Debug.Log($"Cubo {cube.name} no est� alineado correctamente.");
+                // Si una sola pieza falla, el puzle entero es incorrecto.
+                Debug.Log($"Cubo {cube.name} NO está alineado. PosiciónOK={isPositionCorrect}, OrientaciónOK={isOrientationCorrect}");
                 return false;
             }
         }
 
         return true;
+    }
+
+    // Añade este método público para que pueda ser llamado desde otros scripts
+    public void StartDelayedCheck()
+    {
+        StartCoroutine(CheckPuzzleAfterDelay());
+    }
+
+    // Esta es la corutina que crea el retardo
+    private IEnumerator CheckPuzzleAfterDelay()
+    {
+        // Espera un breve momento para que la física y el snapping se completen
+        yield return new WaitForSeconds(0.2f);
+
+        // Ahora sí, ejecuta la lógica de verificación
+        CheckPuzzleCompletion();
     }
 
     void PositionPanel(GameObject panel)
