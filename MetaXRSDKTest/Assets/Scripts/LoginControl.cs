@@ -16,9 +16,11 @@ public class LoginControl : MonoBehaviour
     [SerializeField] private Transform loginButtonsContainer;
     [SerializeField] private Transform deleteButtonsContainer;
     [SerializeField] private GameObject userButtonPrefab;
+    [SerializeField] private GameObject keyboardContainer;
 
     [Header("Navegación")]
     [SerializeField] private string sceneNameToLoad;
+    
 
     void Start()
     {
@@ -28,6 +30,8 @@ public class LoginControl : MonoBehaviour
         continueButton.onClick.AddListener(ConfirmNameAndContinue);
         guestButton.onClick.AddListener(ContinueAsGuest);
         nameInputField.onValueChanged.AddListener(ValidateInput);
+        keyboardContainer.SetActive(false);
+
         ValidateInput("");
 
         // Llenamos las listas de usuarios. UserManager ya habrá cargado los datos.
