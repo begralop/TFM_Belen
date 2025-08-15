@@ -728,6 +728,7 @@ public class GameGenerator : MonoBehaviour
 
     void GenerateGame()
     {
+        placedCubesCount = 0;
         UpdateDebugInfo("Generando nuevo juego...");
 
         var grid = GameObject.FindGameObjectWithTag("Grid");
