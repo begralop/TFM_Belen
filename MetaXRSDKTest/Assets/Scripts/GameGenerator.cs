@@ -5,12 +5,13 @@ using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit;
 using TMPro;
 using UnityEngine.SceneManagement;
+using System.Text;
+using System.Linq;
+
 public class GameGenerator : MonoBehaviour
 {
-    // ELIMINADO: Ya no usamos esta clave directamente
-    // private const string PlayerNameKey = "PlayerName";
-    [Header("Gesti�n de Sesi�n")]
-    [Tooltip("El bot�n que el usuario pulsar� para cerrar sesi�n.")]
+    [Header("Gestión de Sesión")]
+    [Tooltip("El botón que el usuario pulsará para cerrar sesión.")]
     public Button logoutButton;
     [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
     public string loginSceneName;
@@ -22,75 +23,320 @@ public class GameGenerator : MonoBehaviour
     private float elapsedTime = 0f;
     private bool isTimerRunning = false;
 
+    // --- PANEL DE DEBUG ---
+    [Header("Panel de Debug")]
+    [Tooltip("Panel de Canvas para mostrar información de debug")]
+    public GameObject debugPanel;
+    [Tooltip("Texto para mostrar información de debug")]
+    public TextMeshProUGUI debugText;
+    [Tooltip("Activar/Desactivar modo debug")]
+    public bool debugMode = true;
+
+    // Variables para almacenar información de debug
+    private StringBuilder debugInfo = new StringBuilder();
+    private Dictionary<string, Vector3> cubePositions = new Dictionary<string, Vector3>();
+    private Dictionary<string, Quaternion> cubeRotations = new Dictionary<string, Quaternion>();
+
     // --- VARIABLES DE UI UNIFICADAS ---
     [Header("Panel de Resultado")]
-    [Tooltip("El panel que aparecer� al final del puzle.")]
+    [Tooltip("El panel que aparecerá al final del puzle.")]
     public GameObject resultPanel;
-    [Tooltip("El texto para el mensaje principal (�xito o advertencia).")]
+    [Tooltip("El texto para el mensaje principal (éxito o advertencia).")]
     public TextMeshProUGUI resultMessageText;
     [Tooltip("El boton para continuar o cerrar el panel.")]
     public Button continueButton;
     [Tooltip("El boton para reiniciar la partida.")]
     public Button restartButton;
 
-
-
-    [Header("Configuraci�n del Puzle")]
+    [Header("Configuración del Puzle")]
     public GameObject cubePrefab;
     public GameObject magnetPrefab;
     public GameObject tableCenterObject;
-    public List<Material> otherPuzzleMaterials;  // Lista de materiales gen�ricos para las otras caras
-    public Image selectedImage; // Esta ser� la imagen seleccionada cuando el usuario haga clic
+    public List<Material> otherPuzzleMaterials;
+    public Image selectedImage;
     public Transform imagesPanel;
 
     private GameObject selectPuzzle;
-    private List<Vector3> magnetPositions = new List<Vector3>(); // Lista de posiciones de los imanes
+    private List<Vector3> magnetPositions = new List<Vector3>();
     private GridCreator gridCreator;
 
-
-    public Button playButton; // Bot�n de Play
+    public Button playButton;
     public TextMeshProUGUI welcomeText;
 
-
     private int placedCubesCount = 0;
+    private bool puzzleCompleted = false;
 
-    private bool puzzleCompleted = false; // Variable para controlar si el puzzle est� completado
-
-    public float cubeSize = 0.1f; // Tama�o del cubo, ajustar seg�n sea necesario
-    public float magnetHeightOffset = 0.005f; // Altura adicional para que solo la parte roja del im�n sea visible
+    public float cubeSize = 0.1f;
+    public float magnetHeightOffset = 0.005f;
 
     public int rows;
     public int columns;
 
-    private Vector3 initialSuccessPanelPosition; // Posici�n inicial del panel de �xito
-    private Vector3 initialWarningPanelPosition; // Posici�n inicial del panel de advertencia
+    private Vector3 initialSuccessPanelPosition;
+    private Vector3 initialWarningPanelPosition;
 
     void Start()
     {
-        // Aseg�rate de que el panel est� desactivado al inicio
+        // Asegúrate de que el panel esté desactivado al inicio
         resultPanel.SetActive(false);
 
-        // selectPuzzle.SetActive(false); // Esta l�nea daba error si selectPuzzle no estaba asignado
+        // Activar panel de debug si está en modo debug
+        if (debugPanel != null && debugMode)
+        {
+            debugPanel.SetActive(true);
+            UpdateDebugInfo("Sistema de debug iniciado...");
+        }
 
-        // puzzlePanel.SetActive(false); // Esta l�nea daba error si puzzlePanel no estaba asignado
-
-        // Desactivar inicialmente los imanes y cubos
         ClearCurrentMagnets();
         ClearCurrentCubes();
 
-        // --- L�GICA ACTUALIZADA PARA MOSTRAR EL NOMBRE ---
         if (welcomeText != null)
         {
-            // 1. Obtenemos el nombre del usuario actual desde nuestro UserManager
             string playerName = UserManager.GetCurrentUser();
-
-            // 2. Actualizamos el texto en la pantalla
             welcomeText.text = $"Elige un puzzle, {playerName}";
         }
         else
         {
             Debug.LogWarning("La referencia a 'welcomeText' no esta asignada en el Inspector.");
         }
+    }
+
+    void UpdateDebugInfo(string message)
+    {
+        debugInfo.AppendLine($"Mensaje: {message}");
+
+
+        debugText.text = debugInfo.ToString();
+    }
+
+    void UpdateDebugRealTime()
+    {
+        if (!debugMode || debugText == null) return;
+
+        debugInfo.Clear();
+        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+        GameObject[] magnets = GameObject.FindGameObjectsWithTag("refCube");
+
+        debugInfo.AppendLine("=== ESTADO ACTUAL DEL PUZZLE ===");
+        debugInfo.AppendLine($"Tiempo: {elapsedTime:F1}s | Timer: {(isTimerRunning ? "ON" : "OFF")}");
+        debugInfo.AppendLine($"Grid: {rows}x{columns} = {rows * columns} piezas");
+        debugInfo.AppendLine($"Cubos: {cubes.Length}/{rows * columns} | Imanes: {magnets.Length}");
+        debugInfo.AppendLine("=====================================");
+
+        if (cubes.Length > 0)
+        {
+            int cubosEnPosicion = 0;
+            int cubosConFace1Arriba = 0;
+            int cubosCompletamenteCorrectos = 0;
+
+            foreach (GameObject cube in cubes)
+            {
+                debugInfo.AppendLine($"\n>>> {cube.name} <<<");
+
+                string[] splitName = cube.name.Split('_');
+                if (splitName.Length >= 3)
+                {
+                    int row, col;
+                    if (int.TryParse(splitName[1], out row) && int.TryParse(splitName[2], out col))
+                    {
+                        // POSICIÓN
+                        Vector3 targetPosition = GetMagnetPosition(row, col);
+                        Vector3 currentPos = cube.transform.position;
+                        float distancia = Vector3.Distance(currentPos, targetPosition);
+                        bool enPosicion = distancia <= 0.1f;
+
+                        debugInfo.AppendLine($"POSICIÓN:");
+                        debugInfo.AppendLine($"  Actual: ({currentPos.x:F2}, {currentPos.y:F2}, {currentPos.z:F2})");
+                        debugInfo.AppendLine($"  Target: ({targetPosition.x:F2}, {targetPosition.y:F2}, {targetPosition.z:F2})");
+                        debugInfo.AppendLine($"  Distancia: {distancia:F3} {(enPosicion ? "✓ EN POSICIÓN" : "✗ LEJOS")}");
+
+                        // ROTACIÓN
+                        Vector3 euler = cube.transform.rotation.eulerAngles;
+                        debugInfo.AppendLine($"ROTACIÓN ACTUAL:");
+                        debugInfo.AppendLine($"  Euler: ({euler.x:F0}°, {euler.y:F0}°, {euler.z:F0}°)");
+
+                        // ANÁLISIS DE TODAS LAS CARAS
+                        debugInfo.AppendLine($"ANÁLISIS DE CARAS:");
+                        string caraSuperior = DeterminarCaraSuperior(cube);
+                        debugInfo.AppendLine($"  Cara mirando ARRIBA: {caraSuperior}");
+
+                        // ANÁLISIS ESPECÍFICO DE FACE1
+                        Transform face1 = cube.transform.Find("Face1");
+                        if (face1 != null)
+                        {
+                            debugInfo.AppendLine($"FACE1 (la del puzzle):");
+                            Debug.DrawRay(face1.position, face1.transform.up * 0.2f, Color.green);
+
+                            // Dibuja una línea AZUL en la dirección "adelante" de la cara del puzle
+                            Debug.DrawRay(face1.position, face1.transform.forward * 0.2f, Color.blue);
+                            // --- FIN DEL CÓDIGO AÑADIDO ---
+
+                            // Verificar todos los vectores de Face1
+                            float dotForward = Vector3.Dot(face1.transform.forward, Vector3.up);
+                            float dotBack = Vector3.Dot(-face1.transform.forward, Vector3.up);
+                            float dotUp = Vector3.Dot(face1.transform.up, Vector3.up);
+                            float dotDown = Vector3.Dot(-face1.transform.up, Vector3.up);
+                            float dotRight = Vector3.Dot(face1.transform.right, Vector3.up);
+                            float dotLeft = Vector3.Dot(-face1.transform.right, Vector3.up);
+
+                            debugInfo.AppendLine($"  Forward: {dotForward:F2} | Back: {dotBack:F2}");
+                            debugInfo.AppendLine($"  Up: {dotUp:F2} | Down: {dotDown:F2}");
+                            debugInfo.AppendLine($"  Right: {dotRight:F2} | Left: {dotLeft:F2}");
+
+                            float maxDot = Mathf.Max(dotForward, dotBack, dotUp, dotDown, dotRight, dotLeft);
+                            string direccionFace1 = "";
+
+                            if (maxDot == dotForward) direccionFace1 = "FORWARD";
+                            else if (maxDot == dotBack) direccionFace1 = "BACK";
+                            else if (maxDot == dotUp) direccionFace1 = "UP";
+                            else if (maxDot == dotDown) direccionFace1 = "DOWN";
+                            else if (maxDot == dotRight) direccionFace1 = "RIGHT";
+                            else if (maxDot == dotLeft) direccionFace1 = "LEFT";
+
+                            debugInfo.AppendLine($"  Face1 apunta hacia: {direccionFace1} (dot={maxDot:F2})");
+
+                            bool face1Arriba = maxDot > 0.85f;
+
+                            if (face1Arriba)
+                            {
+                                debugInfo.AppendLine($"  ✓✓✓ FACE1 ESTÁ ARRIBA ✓✓✓");
+                                cubosConFace1Arriba++;
+                            }
+                            else
+                            {
+                                debugInfo.AppendLine($"  ✗ Face1 NO está arriba");
+                                debugInfo.AppendLine($"  NECESITAS ROTAR hasta dot > 0.85");
+
+                                // Sugerir rotación
+                                if (maxDot < 0.2f)
+                                {
+                                    debugInfo.AppendLine($"  SUGERENCIA: Gira 90° el cubo");
+                                }
+                                else if (maxDot < 0.5f)
+                                {
+                                    debugInfo.AppendLine($"  SUGERENCIA: Gira ~45-60° más");
+                                }
+                                else
+                                {
+                                    debugInfo.AppendLine($"  SUGERENCIA: Gira ~30° más");
+                                }
+                            }
+
+                            // ESTADO FINAL DEL CUBO
+                            if (enPosicion && face1Arriba)
+                            {
+                                debugInfo.AppendLine($"★★★ CUBO COMPLETO ★★★");
+                                cubosCompletamenteCorrectos++;
+                            }
+                            else if (enPosicion)
+                            {
+                                debugInfo.AppendLine($"⚠ En posición pero MAL ORIENTADO");
+                            }
+                            else if (face1Arriba)
+                            {
+                                debugInfo.AppendLine($"⚠ Bien orientado pero FUERA DE POSICIÓN");
+                            }
+                        }
+
+                        if (enPosicion) cubosEnPosicion++;
+                    }
+                }
+                debugInfo.AppendLine("-----------------------------------");
+            }
+
+            // RESUMEN FINAL
+            debugInfo.AppendLine($"\n=== RESUMEN GLOBAL ===");
+            debugInfo.AppendLine($"En posición: {cubosEnPosicion}/{cubes.Length}");
+            debugInfo.AppendLine($"Face1 arriba: {cubosConFace1Arriba}/{cubes.Length}");
+            debugInfo.AppendLine($"COMPLETOS: {cubosCompletamenteCorrectos}/{cubes.Length}");
+
+            if (cubosCompletamenteCorrectos == rows * columns)
+            {
+                debugInfo.AppendLine($"\n¡¡¡ PUZZLE LISTO PARA VALIDAR !!!");
+            }
+            else
+            {
+                int faltanPosicion = rows * columns - cubosEnPosicion;
+                int faltanOrientacion = cubosEnPosicion - cubosCompletamenteCorrectos;
+
+                if (faltanPosicion > 0)
+                {
+                    debugInfo.AppendLine($"\nFaltan {faltanPosicion} cubos por posicionar");
+                }
+                if (faltanOrientacion > 0)
+                {
+                    debugInfo.AppendLine($"Faltan {faltanOrientacion} cubos por rotar correctamente");
+                }
+            }
+        }
+        else
+        {
+            debugInfo.AppendLine("\nNo hay cubos en la escena.");
+            debugInfo.AppendLine("Selecciona una imagen para empezar.");
+        }
+
+        debugText.text = debugInfo.ToString();
+    }
+
+    private string DeterminarCaraSuperior(GameObject cube)
+    {
+        string[] faceNames = { "Face1", "Face2", "Face3", "Face4", "Face5", "Face6" };
+        string caraSuperior = "NINGUNA";
+        float maxDotProduct = -1f;
+
+        foreach (string faceName in faceNames)
+        {
+            Transform face = cube.transform.Find(faceName);
+            if (face != null)
+            {
+                // Probar todos los vectores de cada cara
+                float[] dots = new float[] {
+                    Vector3.Dot(face.transform.forward, Vector3.up),
+                    Vector3.Dot(-face.transform.forward, Vector3.up),
+                    Vector3.Dot(face.transform.up, Vector3.up),
+                    Vector3.Dot(-face.transform.up, Vector3.up),
+                    Vector3.Dot(face.transform.right, Vector3.up),
+                    Vector3.Dot(-face.transform.right, Vector3.up)
+                };
+
+                float maxDotForFace = Mathf.Max(dots);
+                if (maxDotForFace > maxDotProduct)
+                {
+                    maxDotProduct = maxDotForFace;
+                    caraSuperior = faceName;
+                }
+            }
+        }
+
+        if (maxDotProduct > 0.85f)
+        {
+            return $"{caraSuperior} (dot={maxDotProduct:F2})";
+        }
+        else
+        {
+            return $"{caraSuperior} (dot={maxDotProduct:F2} - NO está plana)";
+        }
+    }
+
+    private bool CheckFace1QuickCheck(GameObject cube)
+    {
+        Transform face1 = cube.transform.Find("Face1");
+        if (face1 == null) return false;
+
+        float maxDot = GetMaxDotProductFace1(face1);
+        return maxDot > 0.85f;
+    }
+
+    private float GetMaxDotProductFace1(Transform face1)
+    {
+        float dotForward = Vector3.Dot(face1.transform.forward, Vector3.up);
+        float dotBackward = Vector3.Dot(-face1.transform.forward, Vector3.up);
+        float dotUp = Vector3.Dot(face1.transform.up, Vector3.up);
+        float dotDown = Vector3.Dot(-face1.transform.up, Vector3.up);
+        float dotRight = Vector3.Dot(face1.transform.right, Vector3.up);
+        float dotLeft = Vector3.Dot(-face1.transform.right, Vector3.up);
+
+        return Mathf.Max(dotForward, dotBackward, dotUp, dotDown, dotRight, dotLeft);
     }
 
     void StartTimer()
@@ -100,11 +346,12 @@ public class GameGenerator : MonoBehaviour
 
         if (timerPanel != null)
             timerPanel.SetActive(true);
+
+
     }
 
     void Update()
     {
-
         if (isTimerRunning)
         {
             elapsedTime += Time.deltaTime;
@@ -112,23 +359,20 @@ public class GameGenerator : MonoBehaviour
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
             timerText.text = $"{minutes:00}:{seconds:00}";
         }
+
     }
 
     public void Logout()
     {
         Debug.Log("Cerrando sesion...");
-
-        // 1. Limpiamos el usuario actual para que la pr�xima vez no se inicie sesi�n autom�ticamente.
         UserManager.SetCurrentUser(null);
 
-        // 2. Comprobamos que el nombre de la escena de login est� definido.
         if (string.IsNullOrEmpty(loginSceneName))
         {
             Debug.LogError("El nombre de la escena de login (loginSceneName) no esta especificado en el Inspector.");
             return;
         }
 
-        // 3. Cargamos la escena de login.
         SceneManager.LoadScene(loginSceneName);
     }
 
@@ -136,28 +380,20 @@ public class GameGenerator : MonoBehaviour
     {
         resultPanel.SetActive(true);
 
-        // 1. Limpiamos CUALQUIER listener que pudieran tener de antes.
+        UpdateDebugInfo($"Mostrando resultado: {(isSuccess ? "ÉXITO" : "FALLO")}");
+
         continueButton.onClick.RemoveAllListeners();
         restartButton.onClick.RemoveAllListeners();
-
-
         restartButton.onClick.AddListener(RestartGame);
 
         if (isSuccess)
         {
-            // Puzle completado con �xito
-            resultMessageText.text = "�Bien hecho! Has completado el puzle. ¿Quieres jugar de nuevo?";
-            // Al pulsar 'Continuar', solo cerramos el panel
+            resultMessageText.text = "¡Bien hecho! Has completado el puzle. ¿Quieres jugar de nuevo?";
             continueButton.onClick.AddListener(CloseResultPanel);
-            // Guardamos la puntuaci�n: usuario actual, nombre del sprite del puzle y tiempo transcurrido.
-         //   UserManager.AddScore(UserManager.GetCurrentUser(), selectedImage.sprite.name, elapsedTime);
-
         }
         else
         {
-            // Puzle incorrecto
             resultMessageText.text = "No has completado el puzle correctamente. ¿Quieres seguir intentándolo?";
-            // Al pulsar 'Continuar', cerramos el panel Y reanudamos el tiempo
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
     }
@@ -165,44 +401,36 @@ public class GameGenerator : MonoBehaviour
     public void CloseResultPanel()
     {
         resultPanel.SetActive(false);
+        UpdateDebugInfo("Panel de resultado cerrado");
     }
 
     public void ContinueGameAfterWarning()
     {
         resultPanel.SetActive(false);
-        isTimerRunning = true; // Reanuda el contador
+        isTimerRunning = true;
 
-        // --- NUEVA L�GICA PARA MOVER TODAS LAS PIEZAS ---
+        UpdateDebugInfo("Continuando juego - Empujando piezas");
 
-        // 1. Buscamos todos los cubos en la escena.
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
-
-        // 2. Obtenemos el centro de la mesa como referencia.
         Vector3 puzzleCenter = tableCenterObject.transform.position;
 
-        // 3. Recorremos cada cubo para aplicarle un desplazamiento.
         foreach (GameObject cube in cubes)
         {
-            // Calculamos el vector que va desde el centro del puzle hacia el cubo.
             Vector3 directionFromCenter = (cube.transform.position - puzzleCenter).normalized;
-
-            // Le quitamos la componente vertical para que el empuje sea solo hacia los lados.
             directionFromCenter.y = 0;
 
-            // Definimos el desplazamiento: un empuj�n hacia fuera y un peque�o salto.
-            float outwardPush = 0.15f; // 15 cm hacia fuera
-            float upwardPush = 0.05f;  // 5 cm hacia arriba
+            float outwardPush = 0.15f;
+            float upwardPush = 0.05f;
             Vector3 displacement = directionFromCenter * outwardPush + Vector3.up * upwardPush;
 
-            // Aplicamos el desplazamiento al cubo.
             cube.transform.position += displacement;
         }
     }
+
     public void RestartGame()
     {
         resultPanel.SetActive(false);
-        // L�gica para reiniciar el juego
-        placedCubesCount = 0; // Esto puede dar error si no existe la clase
+        placedCubesCount = 0;
         elapsedTime = 0f;
         timerText.text = "00:00";
         isTimerRunning = true;
@@ -211,13 +439,18 @@ public class GameGenerator : MonoBehaviour
         ClearCurrentMagnets();
         ClearCurrentCubes();
         GenerateGame();
+
+        UpdateDebugInfo("Juego reiniciado");
     }
 
     public void OnCubePlaced()
     {
         placedCubesCount++;
+        UpdateDebugInfo($"Cubo colocado. Total: {placedCubesCount}/{rows * columns}");
+
         if (placedCubesCount >= (rows * columns))
         {
+            UpdateDebugInfo("Todos los cubos colocados. Iniciando verificación...");
             StartDelayedCheck();
         }
     }
@@ -225,121 +458,268 @@ public class GameGenerator : MonoBehaviour
     public void OnCubeRemoved()
     {
         placedCubesCount--;
+        UpdateDebugInfo($"Cubo removido. Total: {placedCubesCount}/{rows * columns}");
     }
 
     public void CheckPuzzleCompletion()
     {
-        // 1. Detenemos el tiempo
+        UpdateDebugInfo("INICIANDO VERIFICACIÓN COMPLETA DEL PUZZLE");
+
         isTimerRunning = false;
-
-        // 2. Comprobamos si el puzle esta bien resuelto
         bool puzzleEsCorrecto = IsPuzzleComplete();
-
-        // 3. Llamamos a nuestro nuevo m�todo unificado para mostrar el resultado
         ShowResult(puzzleEsCorrecto);
     }
 
     private bool IsPuzzleComplete()
     {
+        // Limpiamos el panel de debug para empezar un nuevo informe
+        debugInfo.Clear();
+
+        debugInfo.AppendLine("=======================================");
+        debugInfo.AppendLine("INICIANDO VERIFICACIÓN (LÓGICA SIMPLE)");
+        debugInfo.AppendLine("=======================================");
+
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+
+        if (cubes.Length == 0)
+        {
+            debugInfo.AppendLine("ADVERTENCIA: No se encontraron cubos.");
+            return false;
+        }
+
+        bool todosCorrectos = true;
 
         foreach (GameObject cube in cubes)
         {
             string[] splitName = cube.name.Split('_');
-            if (splitName.Length < 3)
-            {
-                Debug.LogError($"El nombre del cubo no tiene el formato esperado: {cube.name}");
-                return false;
-            }
-
             int row, col;
-            if (!int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
+
+            if (splitName.Length < 3 || !int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
             {
-                Debug.LogError($"No se pudieron parsear los índices de la cuadrícula desde el nombre del cubo: {cube.name}");
-                return false;
+                debugInfo.AppendLine($"ERROR: Nombre de cubo inválido: {cube.name}");
+                todosCorrectos = false;
+                continue; // Pasamos al siguiente cubo en lugar de salir
             }
 
-            Vector3 targetPosition = GetMagnetPosition(row, col);
+            debugInfo.AppendLine($"\n--- Verificando Cubo: {cube.name} ---");
 
-            // Verificación de alineación y orientación
-            if (Vector3.Distance(cube.transform.position, targetPosition) <= 0.1f &&
-                Quaternion.Angle(cube.transform.rotation, Quaternion.identity) <= 15.0f)
+            // --- CÁLCULOS ---
+            Vector3 targetPosition = GetMagnetPosition(row, col);
+            float distancia = Vector3.Distance(cube.transform.position, targetPosition);
+
+            Quaternion targetRotation = Quaternion.identity;
+            float angulo = Quaternion.Angle(cube.transform.rotation, targetRotation);
+
+            // --- INFORMACIÓN DETALLADA ---
+            debugInfo.AppendLine($"Distancia: {distancia:F3} (Req: <= 0.05)");
+            debugInfo.AppendLine($"Ángulo: {angulo:F1} (Req: <= 5.0)");
+
+            // --- VERIFICACIÓN ---
+            if (distancia <= 0.1f && angulo <= 10.0f)
             {
+                debugInfo.AppendLine($"===> RESULTADO: CORRECTO");
                 cube.transform.position = targetPosition;
-                cube.transform.rotation = Quaternion.identity;
-                Debug.Log($"Cubo {cube.name} alineado correctamente.");
+                cube.transform.rotation = targetRotation;
             }
             else
             {
-                Debug.Log($"Cubo {cube.name} no está alineado correctamente.");
-                return false;
+                debugInfo.AppendLine($"===> RESULTADO: INCORRECTO");
+                todosCorrectos = false; // Marcamos que al menos uno ha fallado
             }
         }
 
-        return true;
+        debugInfo.AppendLine("\n=======================================");
+        if (todosCorrectos)
+        {
+            debugInfo.AppendLine("¡ÉXITO! Todas las piezas están correctas.");
+        }
+        else
+        {
+            debugInfo.AppendLine("FALLO: Al menos una pieza es incorrecta.");
+        }
+        debugInfo.AppendLine("=======================================");
+
+        // Actualizamos el panel de texto con toda la información recopilada
+
+        return todosCorrectos;
     }
 
-    // Añade este método público para que pueda ser llamado desde otros scripts
+    private bool VerificarSiFace1EstArriba(GameObject cube)
+    {
+        Transform face1 = cube.transform.Find("Face1");
+        if (face1 == null)
+        {
+            debugInfo.AppendLine($"    ERROR: No se encuentra Face1 en {cube.name}");
+            return false;
+        }
+
+        // --- Reemplaza el bloque de cálculo dentro de VerificarSiFace1EstArriba ---
+
+        // Con el prefab rotado 90 grados en X, la normal de la cara ahora es el vector LOCAL "up" del objeto.
+        float dot = Vector3.Dot(face1.transform.up, Vector3.up);
+
+        // Encontrar el máximo dot product (ahora solo hay uno)
+        float maxDot = dot;
+
+        // Debug
+        if (debugMode)
+        {
+            debugInfo.AppendLine($"    Face1: La cara visible (transform.up) apunta hacia arriba ({dot:F3})");
+        }
+
+        bool estaArriba = maxDot > 0.85f;
+
+        if (debugMode)
+        {
+            debugInfo.AppendLine($"    Face1 está arriba: {(estaArriba ? "SÍ" : "NO")} (max dot: {maxDot:F3})");
+        }
+
+        return estaArriba;
+
+        // --- Fin del reemplazo ---
+    }
+
+    private void VerificarCaraSuperior(GameObject cube, int row, int col)
+    {
+        debugInfo.AppendLine($"  === Verificación Cara Superior ===");
+
+        // Buscar todas las caras del cubo
+        string[] faceNames = { "Face1", "Face2", "Face3", "Face4", "Face5", "Face6" };
+        string caraSuperior = "";
+        float maxDotProduct = -1f;
+
+        foreach (string faceName in faceNames)
+        {
+            Transform face = cube.transform.Find(faceName);
+            if (face != null)
+            {
+                // Probar diferentes vectores de la cara para encontrar cuál apunta hacia arriba
+                Vector3[] vectors = {
+                    face.transform.up,
+                    -face.transform.up,
+                    face.transform.forward,
+                    -face.transform.forward,
+                    face.transform.right,
+                    -face.transform.right
+                };
+
+                foreach (Vector3 vector in vectors)
+                {
+                    float dot = Vector3.Dot(vector, Vector3.up);
+                    if (dot > maxDotProduct)
+                    {
+                        maxDotProduct = dot;
+                        caraSuperior = faceName;
+                    }
+                }
+            }
+        }
+
+        debugInfo.AppendLine($"    Cara mirando hacia arriba: {caraSuperior}");
+        debugInfo.AppendLine($"    Dot product máximo: {maxDotProduct:F3}");
+
+        // Verificar específicamente Face1
+        Transform face1 = cube.transform.Find("Face1");
+        if (face1 != null)
+        {
+            // Verificar cada posible orientación de Face1
+            Vector3 face1Normal = face1.transform.forward; // Normal de la cara
+            float dotForward = Vector3.Dot(face1.transform.forward, Vector3.up);
+            float dotBack = Vector3.Dot(-face1.transform.forward, Vector3.up);
+            float dotUp = Vector3.Dot(face1.transform.up, Vector3.up);
+            float dotDown = Vector3.Dot(-face1.transform.up, Vector3.up);
+            float dotRight = Vector3.Dot(face1.transform.right, Vector3.up);
+            float dotLeft = Vector3.Dot(-face1.transform.right, Vector3.up);
+
+            debugInfo.AppendLine($"    Face1 orientaciones:");
+            debugInfo.AppendLine($"      Forward: {dotForward:F3}");
+            debugInfo.AppendLine($"      Back: {dotBack:F3}");
+            debugInfo.AppendLine($"      Up: {dotUp:F3}");
+            debugInfo.AppendLine($"      Down: {dotDown:F3}");
+            debugInfo.AppendLine($"      Right: {dotRight:F3}");
+            debugInfo.AppendLine($"      Left: {dotLeft:F3}");
+
+            float maxFace1Dot = Mathf.Max(dotForward, dotBack, dotUp, dotDown, dotRight, dotLeft);
+
+            if (caraSuperior == "Face1" && maxFace1Dot > 0.9f)
+            {
+                debugInfo.AppendLine($"    ✓ Face1 está mirando hacia ARRIBA");
+                debugInfo.AppendLine($"    Esta es la cara con la parte del puzzle [{row},{col}]");
+            }
+            else if (maxFace1Dot > 0.9f)
+            {
+                debugInfo.AppendLine($"    ⚠ Face1 PODRÍA estar arriba con rotación");
+                debugInfo.AppendLine($"    Necesita girar el cubo para que Face1 esté visible");
+            }
+            else
+            {
+                debugInfo.AppendLine($"    ✗ Face1 NO está mirando hacia arriba");
+                debugInfo.AppendLine($"    Cara superior actual: {caraSuperior}");
+                debugInfo.AppendLine($"    La imagen del puzzle NO está visible correctamente");
+            }
+        }
+        else
+        {
+            debugInfo.AppendLine($"    ERROR: No se encuentra Face1 en el cubo");
+        }
+    }
+
+    private void UpdateDebugText()
+    {
+        if (debugText != null && debugMode)
+        {
+            debugText.text = debugInfo.ToString();
+        }
+    }
+
     public void StartDelayedCheck()
     {
         StartCoroutine(CheckPuzzleAfterDelay());
     }
 
-    // Esta es la corutina que crea el retardo
     private IEnumerator CheckPuzzleAfterDelay()
     {
-        // Espera un breve momento para que la física y el snapping se completen
+        UpdateDebugInfo("Esperando 0.2s para que la física se estabilice...");
         yield return new WaitForSeconds(0.2f);
-
-        // Ahora sí, ejecuta la lógica de verificación
         CheckPuzzleCompletion();
     }
 
+
     void PositionPanel(GameObject panel)
     {
-        // Asegurarse de que el centro de la mesa est� asignado
         if (tableCenterObject == null)
         {
             Debug.LogError("No se ha asignado un objeto de referencia para el centro de la mesa.");
             return;
         }
 
-        // Calcular el centro de la cuadr�cula de imanes
         Vector3 tableCenter = tableCenterObject.transform.position;
         float puzzleWidth = gridCreator.columns * cubeSize;
         float puzzleHeight = gridCreator.rows * cubeSize;
 
-        // Obtener la posici�n central de la cuadr�cula
         Vector3 puzzleCenter = new Vector3(
             tableCenter.x,
-            tableCenter.y + magnetHeightOffset,  // Altura de los imanes
+            tableCenter.y + magnetHeightOffset,
             tableCenter.z
         );
 
-        // A�adir un offset vertical para que el panel aparezca justo encima de los imanes
-        float panelHeightOffset = 0.2f;  // Ajustar la altura del panel por encima de los imanes
+        float panelHeightOffset = 0.2f;
         Vector3 panelPosition = new Vector3(
             puzzleCenter.x,
-            puzzleCenter.y + panelHeightOffset, // Elevar el panel por encima de los imanes
+            puzzleCenter.y + panelHeightOffset,
             puzzleCenter.z
         );
 
-        // Posicionar el panel
         panel.transform.position = panelPosition;
-
-        // Asegurarse de que el panel est� mirando hacia la c�mara
         panel.transform.LookAt(Camera.main.transform);
-
-        // Ajustar la rotaci�n en el eje Y si es necesario para que el panel est� completamente de frente
         panel.transform.rotation = Quaternion.Euler(0, panel.transform.rotation.eulerAngles.y, 0);
-
-        // Escalar el panel si es necesario
         panel.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
-
     }
 
     void GenerateGame()
     {
+        UpdateDebugInfo("Generando nuevo juego...");
+
         var grid = GameObject.FindGameObjectWithTag("Grid");
         var curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
 
@@ -397,7 +777,7 @@ public class GameGenerator : MonoBehaviour
                             }
                             cube.name = $"Cube_{r}_{c}";
                             var interactable = cube.AddComponent<XRGrabInteractable>();
-                            cube.AddComponent<CubeInteraction>(); // Puede dar error si la clase no existe
+                            cube.AddComponent<CubeInteraction>();
                         }
                         else
                         {
@@ -410,6 +790,8 @@ public class GameGenerator : MonoBehaviour
                         StartTimer();
                     }
                 }
+
+                UpdateDebugInfo($"Juego generado: {rows}x{columns} = {rows * columns} cubos");
             }
             else
             {
@@ -490,11 +872,12 @@ public class GameGenerator : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogError("No se pudo cargar el prefab de im�n.");
+                    Debug.LogError("No se pudo cargar el prefab de imán.");
                 }
             }
         }
-        Debug.Log($"Se generaron {magnetPositions.Count} posiciones de imanes.");
+
+        UpdateDebugInfo($"Se generaron {magnetPositions.Count} posiciones de imanes");
     }
 
     void ClearCurrentMagnets()
@@ -534,28 +917,26 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            Debug.LogError("La posici�n del im�n est� fuera de los l�mites.");
+            Debug.LogError("La posición del imán está fuera de los límites.");
             return Vector3.zero;
         }
     }
 
     public void OnImageSelected(Image image)
     {
-        // --- INICIO: LÓGICA AÑADIDA PARA REINICIAR EL TEMPORIZADOR ---
-        // Cuando el usuario elige una imagen nueva, reseteamos el temporizador.
         elapsedTime = 0f;
         isTimerRunning = false;
 
-        // Actualizamos el texto para que muestre "00:00"
         if (timerText != null)
         {
             timerText.text = "00:00";
         }
-        // --- FIN: LÓGICA AÑADIDA ---
 
         selectedImage = image;
         otherPuzzleMaterials.Clear();
         GenerateMaterialsFromPanelImages();
+
+        UpdateDebugInfo($"Imagen seleccionada: {image.sprite.name}");
     }
 
     void GenerateMaterialsFromPanelImages()
@@ -574,23 +955,12 @@ public class GameGenerator : MonoBehaviour
                         Texture2D texture = SpriteToTexture2D(img.sprite);
                         Material[] materials = DivideImageIntoMaterials(texture, rows, columns);
                         otherPuzzleMaterials.AddRange(materials);
-                        Debug.Log("Imagen a�adida a otherPuzzleMaterials: " + img.sprite.name);
-                    }
-                    else
-                    {
-                        Debug.LogWarning("El Image en " + backgroundTransform.name + " no tiene un sprite asignado o es el sprite seleccionado.");
+                        Debug.Log("Imagen añadida a otherPuzzleMaterials: " + img.sprite.name);
                     }
                 }
-                else
-                {
-                    Debug.LogWarning("No se encontr� 'Background' en " + child.name);
-                }
-            }
-            else
-            {
-                Debug.LogWarning("No se encontr� 'Content' en " + child.name);
             }
         }
-        Debug.Log("Total de materiales generados: " + otherPuzzleMaterials.Count);
+
+        UpdateDebugInfo($"Total de materiales generados: {otherPuzzleMaterials.Count}");
     }
 }

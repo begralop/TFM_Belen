@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 1572108446425315786}
   - component: {fileID: 1572108446425315787}
   - component: {fileID: 1572108446425315784}
-  - component: {fileID: 2215274739744027119}
+  - component: {fileID: 7919125684114607466}
   m_Layer: 0
   m_Name: Magnet
   m_TagString: refCube
@@ -106,7 +106,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 2, z: 1}
   m_Center: {x: 0, y: -0.5, z: 0}
---- !u!114 &2215274739744027119
+--- !u!114 &7919125684114607466
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

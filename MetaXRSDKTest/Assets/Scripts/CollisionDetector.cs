@@ -149,7 +149,6 @@ public class CollisionDetector : MonoBehaviour
                     eulerAngles.z = 0;
                 */
                 print(eulerAngles.x + " ** " + eulerAngles.y + " ** " + eulerAngles.z);
-
                 // Calculates the minimum rotation for the cube to be properly alligned
                 var dif0 = Mathf.Abs(0 - eulerAngles.y);
                 var dif90 = Mathf.Abs(90 - eulerAngles.y);
