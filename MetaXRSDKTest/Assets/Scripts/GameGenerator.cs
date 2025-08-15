@@ -518,7 +518,17 @@ public class GameGenerator : MonoBehaviour
             if (distancia <= 0.1f && angulo <= 10.0f)
             {
                 debugInfo.AppendLine($"===> RESULTADO: CORRECTO");
-                cube.transform.position = targetPosition;
+                // --- CORRECCIÓN APLICADA AQUÍ ---
+
+                // 1. MODIFICAMOS LA ALTURA DEL OBJETIVO
+                // Esto pondrá la pieza al doble de la altura del imán respecto al origen del mundo (Y=0).
+                targetPosition.y = targetPosition.y * 2;
+
+                // 2. DESCOMENTAMOS LA LÍNEA PARA APLICAR LA POSICIÓN FINAL
+                // Esta es la línea clave que faltaba. Ahora el cubo se ajustará a su sitio.
+               // cube.transform.position = targetPosition;
+
+                // La rotación ya estaba correcta.
                 cube.transform.rotation = targetRotation;
             }
             else
