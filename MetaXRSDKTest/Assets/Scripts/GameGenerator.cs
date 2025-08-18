@@ -109,236 +109,6 @@ public class GameGenerator : MonoBehaviour
         debugText.text = debugInfo.ToString();
     }
 
-    void UpdateDebugRealTime()
-    {
-        if (!debugMode || debugText == null) return;
-
-        debugInfo.Clear();
-        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
-        GameObject[] magnets = GameObject.FindGameObjectsWithTag("refCube");
-
-        debugInfo.AppendLine("=== ESTADO ACTUAL DEL PUZZLE ===");
-        debugInfo.AppendLine($"Tiempo: {elapsedTime:F1}s | Timer: {(isTimerRunning ? "ON" : "OFF")}");
-        debugInfo.AppendLine($"Grid: {rows}x{columns} = {rows * columns} piezas");
-        debugInfo.AppendLine($"Cubos: {cubes.Length}/{rows * columns} | Imanes: {magnets.Length}");
-        debugInfo.AppendLine("=====================================");
-
-        if (cubes.Length > 0)
-        {
-            int cubosEnPosicion = 0;
-            int cubosConFace1Arriba = 0;
-            int cubosCompletamenteCorrectos = 0;
-
-            foreach (GameObject cube in cubes)
-            {
-                debugInfo.AppendLine($"\n>>> {cube.name} <<<");
-
-                string[] splitName = cube.name.Split('_');
-                if (splitName.Length >= 3)
-                {
-                    int row, col;
-                    if (int.TryParse(splitName[1], out row) && int.TryParse(splitName[2], out col))
-                    {
-                        // POSICIÓN
-                        Vector3 targetPosition = GetMagnetPosition(row, col);
-                        Vector3 currentPos = cube.transform.position;
-                        float distancia = Vector3.Distance(currentPos, targetPosition);
-                        bool enPosicion = distancia <= 0.1f;
-
-                        debugInfo.AppendLine($"POSICIÓN:");
-                        debugInfo.AppendLine($"  Actual: ({currentPos.x:F2}, {currentPos.y:F2}, {currentPos.z:F2})");
-                        debugInfo.AppendLine($"  Target: ({targetPosition.x:F2}, {targetPosition.y:F2}, {targetPosition.z:F2})");
-                        debugInfo.AppendLine($"  Distancia: {distancia:F3} {(enPosicion ? "✓ EN POSICIÓN" : "✗ LEJOS")}");
-
-                        // ROTACIÓN
-                        Vector3 euler = cube.transform.rotation.eulerAngles;
-                        debugInfo.AppendLine($"ROTACIÓN ACTUAL:");
-                        debugInfo.AppendLine($"  Euler: ({euler.x:F0}°, {euler.y:F0}°, {euler.z:F0}°)");
-
-                        // ANÁLISIS DE TODAS LAS CARAS
-                        debugInfo.AppendLine($"ANÁLISIS DE CARAS:");
-                        string caraSuperior = DeterminarCaraSuperior(cube);
-                        debugInfo.AppendLine($"  Cara mirando ARRIBA: {caraSuperior}");
-
-                        // ANÁLISIS ESPECÍFICO DE FACE1
-                        Transform face1 = cube.transform.Find("Face1");
-                        if (face1 != null)
-                        {
-                            debugInfo.AppendLine($"FACE1 (la del puzzle):");
-                            Debug.DrawRay(face1.position, face1.transform.up * 0.2f, Color.green);
-
-                            // Dibuja una línea AZUL en la dirección "adelante" de la cara del puzle
-                            Debug.DrawRay(face1.position, face1.transform.forward * 0.2f, Color.blue);
-                            // --- FIN DEL CÓDIGO AÑADIDO ---
-
-                            // Verificar todos los vectores de Face1
-                            float dotForward = Vector3.Dot(face1.transform.forward, Vector3.up);
-                            float dotBack = Vector3.Dot(-face1.transform.forward, Vector3.up);
-                            float dotUp = Vector3.Dot(face1.transform.up, Vector3.up);
-                            float dotDown = Vector3.Dot(-face1.transform.up, Vector3.up);
-                            float dotRight = Vector3.Dot(face1.transform.right, Vector3.up);
-                            float dotLeft = Vector3.Dot(-face1.transform.right, Vector3.up);
-
-                            debugInfo.AppendLine($"  Forward: {dotForward:F2} | Back: {dotBack:F2}");
-                            debugInfo.AppendLine($"  Up: {dotUp:F2} | Down: {dotDown:F2}");
-                            debugInfo.AppendLine($"  Right: {dotRight:F2} | Left: {dotLeft:F2}");
-
-                            float maxDot = Mathf.Max(dotForward, dotBack, dotUp, dotDown, dotRight, dotLeft);
-                            string direccionFace1 = "";
-
-                            if (maxDot == dotForward) direccionFace1 = "FORWARD";
-                            else if (maxDot == dotBack) direccionFace1 = "BACK";
-                            else if (maxDot == dotUp) direccionFace1 = "UP";
-                            else if (maxDot == dotDown) direccionFace1 = "DOWN";
-                            else if (maxDot == dotRight) direccionFace1 = "RIGHT";
-                            else if (maxDot == dotLeft) direccionFace1 = "LEFT";
-
-                            debugInfo.AppendLine($"  Face1 apunta hacia: {direccionFace1} (dot={maxDot:F2})");
-
-                            bool face1Arriba = maxDot > 0.85f;
-
-                            if (face1Arriba)
-                            {
-                                debugInfo.AppendLine($"  ✓✓✓ FACE1 ESTÁ ARRIBA ✓✓✓");
-                                cubosConFace1Arriba++;
-                            }
-                            else
-                            {
-                                debugInfo.AppendLine($"  ✗ Face1 NO está arriba");
-                                debugInfo.AppendLine($"  NECESITAS ROTAR hasta dot > 0.85");
-
-                                // Sugerir rotación
-                                if (maxDot < 0.2f)
-                                {
-                                    debugInfo.AppendLine($"  SUGERENCIA: Gira 90° el cubo");
-                                }
-                                else if (maxDot < 0.5f)
-                                {
-                                    debugInfo.AppendLine($"  SUGERENCIA: Gira ~45-60° más");
-                                }
-                                else
-                                {
-                                    debugInfo.AppendLine($"  SUGERENCIA: Gira ~30° más");
-                                }
-                            }
-
-                            // ESTADO FINAL DEL CUBO
-                            if (enPosicion && face1Arriba)
-                            {
-                                debugInfo.AppendLine($"★★★ CUBO COMPLETO ★★★");
-                                cubosCompletamenteCorrectos++;
-                            }
-                            else if (enPosicion)
-                            {
-                                debugInfo.AppendLine($"⚠ En posición pero MAL ORIENTADO");
-                            }
-                            else if (face1Arriba)
-                            {
-                                debugInfo.AppendLine($"⚠ Bien orientado pero FUERA DE POSICIÓN");
-                            }
-                        }
-
-                        if (enPosicion) cubosEnPosicion++;
-                    }
-                }
-                debugInfo.AppendLine("-----------------------------------");
-            }
-
-            // RESUMEN FINAL
-            debugInfo.AppendLine($"\n=== RESUMEN GLOBAL ===");
-            debugInfo.AppendLine($"En posición: {cubosEnPosicion}/{cubes.Length}");
-            debugInfo.AppendLine($"Face1 arriba: {cubosConFace1Arriba}/{cubes.Length}");
-            debugInfo.AppendLine($"COMPLETOS: {cubosCompletamenteCorrectos}/{cubes.Length}");
-
-            if (cubosCompletamenteCorrectos == rows * columns)
-            {
-                debugInfo.AppendLine($"\n¡¡¡ PUZZLE LISTO PARA VALIDAR !!!");
-            }
-            else
-            {
-                int faltanPosicion = rows * columns - cubosEnPosicion;
-                int faltanOrientacion = cubosEnPosicion - cubosCompletamenteCorrectos;
-
-                if (faltanPosicion > 0)
-                {
-                    debugInfo.AppendLine($"\nFaltan {faltanPosicion} cubos por posicionar");
-                }
-                if (faltanOrientacion > 0)
-                {
-                    debugInfo.AppendLine($"Faltan {faltanOrientacion} cubos por rotar correctamente");
-                }
-            }
-        }
-        else
-        {
-            debugInfo.AppendLine("\nNo hay cubos en la escena.");
-            debugInfo.AppendLine("Selecciona una imagen para empezar.");
-        }
-
-        debugText.text = debugInfo.ToString();
-    }
-
-    private string DeterminarCaraSuperior(GameObject cube)
-    {
-        string[] faceNames = { "Face1", "Face2", "Face3", "Face4", "Face5", "Face6" };
-        string caraSuperior = "NINGUNA";
-        float maxDotProduct = -1f;
-
-        foreach (string faceName in faceNames)
-        {
-            Transform face = cube.transform.Find(faceName);
-            if (face != null)
-            {
-                // Probar todos los vectores de cada cara
-                float[] dots = new float[] {
-                    Vector3.Dot(face.transform.forward, Vector3.up),
-                    Vector3.Dot(-face.transform.forward, Vector3.up),
-                    Vector3.Dot(face.transform.up, Vector3.up),
-                    Vector3.Dot(-face.transform.up, Vector3.up),
-                    Vector3.Dot(face.transform.right, Vector3.up),
-                    Vector3.Dot(-face.transform.right, Vector3.up)
-                };
-
-                float maxDotForFace = Mathf.Max(dots);
-                if (maxDotForFace > maxDotProduct)
-                {
-                    maxDotProduct = maxDotForFace;
-                    caraSuperior = faceName;
-                }
-            }
-        }
-
-        if (maxDotProduct > 0.85f)
-        {
-            return $"{caraSuperior} (dot={maxDotProduct:F2})";
-        }
-        else
-        {
-            return $"{caraSuperior} (dot={maxDotProduct:F2} - NO está plana)";
-        }
-    }
-
-    private bool CheckFace1QuickCheck(GameObject cube)
-    {
-        Transform face1 = cube.transform.Find("Face1");
-        if (face1 == null) return false;
-
-        float maxDot = GetMaxDotProductFace1(face1);
-        return maxDot > 0.85f;
-    }
-
-    private float GetMaxDotProductFace1(Transform face1)
-    {
-        float dotForward = Vector3.Dot(face1.transform.forward, Vector3.up);
-        float dotBackward = Vector3.Dot(-face1.transform.forward, Vector3.up);
-        float dotUp = Vector3.Dot(face1.transform.up, Vector3.up);
-        float dotDown = Vector3.Dot(-face1.transform.up, Vector3.up);
-        float dotRight = Vector3.Dot(face1.transform.right, Vector3.up);
-        float dotLeft = Vector3.Dot(-face1.transform.right, Vector3.up);
-
-        return Mathf.Max(dotForward, dotBackward, dotUp, dotDown, dotRight, dotLeft);
-    }
-
     void StartTimer()
     {
         elapsedTime = 0f;
@@ -388,7 +158,24 @@ public class GameGenerator : MonoBehaviour
 
         if (isSuccess)
         {
-            resultMessageText.text = "¡Bien hecho! Has completado el puzle. ¿Quieres jugar de nuevo?";
+            // NUEVO: Detener el timer y guardar la puntuación
+            isTimerRunning = false;
+
+            // Obtener el ID del puzzle actual (usamos el nombre del sprite de la imagen seleccionada)
+            string puzzleId = GetCurrentPuzzleId();
+
+            // Guardar el tiempo para el usuario actual
+            string currentUser = UserManager.GetCurrentUser();
+            if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
+            {
+                UserManager.AddScore(currentUser, puzzleId, elapsedTime);
+                Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s");
+            }
+
+            // Mostrar el mensaje de éxito con el tiempo
+            int minutes = Mathf.FloorToInt(elapsedTime / 60f);
+            int seconds = Mathf.FloorToInt(elapsedTime % 60f);
+            resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00}. ¿Quieres jugar de nuevo?";
             continueButton.onClick.AddListener(CloseResultPanel);
         }
         else
@@ -396,6 +183,28 @@ public class GameGenerator : MonoBehaviour
             resultMessageText.text = "No has completado el puzle correctamente. ¿Quieres seguir intentándolo?";
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
+    }
+
+    // NUEVO: Método auxiliar para obtener el ID del puzzle actual
+    private string GetCurrentPuzzleId()
+    {
+        if (selectedImage != null && selectedImage.sprite != null)
+        {
+            return selectedImage.sprite.name;
+        }
+
+        // Si no hay imagen seleccionada, intentar obtenerla del curvedBackground
+        GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
+        if (curvedBackground != null)
+        {
+            Image bgImage = curvedBackground.GetComponent<Image>();
+            if (bgImage != null && bgImage.sprite != null)
+            {
+                return bgImage.sprite.name;
+            }
+        }
+
+        return null;
     }
 
     public void CloseResultPanel()
