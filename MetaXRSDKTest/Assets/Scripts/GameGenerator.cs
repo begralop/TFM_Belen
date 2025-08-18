@@ -22,6 +22,8 @@ public class GameGenerator : MonoBehaviour
 
     private float elapsedTime = 0f;
     private bool isTimerRunning = false;
+    // Añade una variable para controlar si ya se guardó el tiempo
+    private bool timeAlreadySaved = false;
 
     // --- PANEL DE DEBUG ---
     [Header("Panel de Debug")]
@@ -47,6 +49,11 @@ public class GameGenerator : MonoBehaviour
     public Button continueButton;
     [Tooltip("El boton para reiniciar la partida.")]
     public Button restartButton;
+
+
+    [Header("Sistema de Progresión de Puzzles")]
+    private int currentPuzzleIndex = -1; // Índice del puzzle actual
+    private List<GameObject> availablePuzzles = new List<GameObject>(); // Lista de todos los toggles de puzzles
 
     [Header("Configuración del Puzle")]
     public GameObject cubePrefab;
@@ -77,6 +84,7 @@ public class GameGenerator : MonoBehaviour
 
     void Start()
     {
+        CollectAvailablePuzzles();
         // Asegúrate de que el panel esté desactivado al inicio
         resultPanel.SetActive(false);
 
@@ -108,6 +116,25 @@ public class GameGenerator : MonoBehaviour
 
         debugText.text = debugInfo.ToString();
     }
+
+    // NUEVO: Método para recolectar todos los puzzles disponibles
+    private void CollectAvailablePuzzles()
+    {
+        // Buscar todos los ImagePanelController en la escena
+        ImagePanelController[] controllers = FindObjectsOfType<ImagePanelController>();
+
+        availablePuzzles.Clear();
+        foreach (var controller in controllers)
+        {
+            availablePuzzles.Add(controller.gameObject);
+        }
+
+        // Ordenar por nombre para mantener un orden consistente
+        availablePuzzles.Sort((a, b) => a.name.CompareTo(b.name));
+
+        Debug.Log($"Se encontraron {availablePuzzles.Count} puzzles disponibles");
+    }
+
 
     void StartTimer()
     {
@@ -145,7 +172,7 @@ public class GameGenerator : MonoBehaviour
 
         SceneManager.LoadScene(loginSceneName);
     }
-
+    // Modifica el método ShowResult para cambiar el comportamiento del botón continuar:
     private void ShowResult(bool isSuccess)
     {
         resultPanel.SetActive(true);
@@ -158,32 +185,78 @@ public class GameGenerator : MonoBehaviour
 
         if (isSuccess)
         {
-            // NUEVO: Detener el timer y guardar la puntuación
+            // Detener el timer y guardar la puntuación
             isTimerRunning = false;
 
-            // Obtener el ID del puzzle actual (usamos el nombre del sprite de la imagen seleccionada)
-            string puzzleId = GetCurrentPuzzleId();
-
-            // Guardar el tiempo para el usuario actual
-            string currentUser = UserManager.GetCurrentUser();
-            if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
+            // IMPORTANTE: Solo guardar si no se ha guardado ya
+            if (!timeAlreadySaved)
             {
-                UserManager.AddScore(currentUser, puzzleId, elapsedTime);
-                Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s");
+                // Obtener el ID del puzzle actual
+                string puzzleId = GetCurrentPuzzleId();
+
+                // Guardar el tiempo para el usuario actual
+                string currentUser = UserManager.GetCurrentUser();
+                if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
+                {
+                    UserManager.AddScore(currentUser, puzzleId, elapsedTime);
+                    Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s");
+                    timeAlreadySaved = true; // Marcar que ya se guardó
+                }
+            }
+            else
+            {
+                Debug.Log("El tiempo ya fue guardado anteriormente, evitando duplicado");
             }
 
             // Mostrar el mensaje de éxito con el tiempo
             int minutes = Mathf.FloorToInt(elapsedTime / 60f);
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
-            resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00}. ¿Quieres jugar de nuevo?";
-            continueButton.onClick.AddListener(CloseResultPanel);
+
+            // MODIFICADO: Cambiar el texto del botón y su función según si hay más puzzles
+            bool hasNextPuzzle = (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1);
+
+            if (hasNextPuzzle)
+            {
+                resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00}.\n¿Quieres continuar con el siguiente puzzle?";
+
+                // Cambiar el texto del botón
+                var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
+                if (continueButtonText != null)
+                {
+                    continueButtonText.text = "Siguiente";
+                }
+
+                continueButton.onClick.AddListener(LoadNextPuzzle);
+            }
+            else
+            {
+                resultMessageText.text = $"¡Felicidades! Has completado el puzle en {minutes:00}:{seconds:00}.\n¡Has completado todos los puzzles disponibles!";
+
+                // Cambiar el texto del botón
+                var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
+                if (continueButtonText != null)
+                {
+                    continueButtonText.text = "Cerrar";
+                }
+
+                continueButton.onClick.AddListener(CloseResultPanel);
+            }
         }
         else
         {
             resultMessageText.text = "No has completado el puzle correctamente. ¿Quieres seguir intentándolo?";
+
+            // Asegurarse de que el texto del botón sea "Continuar"
+            var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (continueButtonText != null)
+            {
+                continueButtonText.text = "Reintentar";
+            }
+
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
     }
+
 
     // NUEVO: Método auxiliar para obtener el ID del puzzle actual
     private string GetCurrentPuzzleId()
@@ -244,6 +317,7 @@ public class GameGenerator : MonoBehaviour
         timerText.text = "00:00";
         isTimerRunning = true;
         puzzleCompleted = false;
+        timeAlreadySaved = false;
 
         ClearCurrentMagnets();
         ClearCurrentCubes();
@@ -363,133 +437,6 @@ public class GameGenerator : MonoBehaviour
         return todosCorrectos;
     }
 
-    private bool VerificarSiFace1EstArriba(GameObject cube)
-    {
-        Transform face1 = cube.transform.Find("Face1");
-        if (face1 == null)
-        {
-            debugInfo.AppendLine($"    ERROR: No se encuentra Face1 en {cube.name}");
-            return false;
-        }
-
-        // --- Reemplaza el bloque de cálculo dentro de VerificarSiFace1EstArriba ---
-
-        // Con el prefab rotado 90 grados en X, la normal de la cara ahora es el vector LOCAL "up" del objeto.
-        float dot = Vector3.Dot(face1.transform.up, Vector3.up);
-
-        // Encontrar el máximo dot product (ahora solo hay uno)
-        float maxDot = dot;
-
-        // Debug
-        if (debugMode)
-        {
-            debugInfo.AppendLine($"    Face1: La cara visible (transform.up) apunta hacia arriba ({dot:F3})");
-        }
-
-        bool estaArriba = maxDot > 0.85f;
-
-        if (debugMode)
-        {
-            debugInfo.AppendLine($"    Face1 está arriba: {(estaArriba ? "SÍ" : "NO")} (max dot: {maxDot:F3})");
-        }
-
-        return estaArriba;
-
-        // --- Fin del reemplazo ---
-    }
-
-    private void VerificarCaraSuperior(GameObject cube, int row, int col)
-    {
-        debugInfo.AppendLine($"  === Verificación Cara Superior ===");
-
-        // Buscar todas las caras del cubo
-        string[] faceNames = { "Face1", "Face2", "Face3", "Face4", "Face5", "Face6" };
-        string caraSuperior = "";
-        float maxDotProduct = -1f;
-
-        foreach (string faceName in faceNames)
-        {
-            Transform face = cube.transform.Find(faceName);
-            if (face != null)
-            {
-                // Probar diferentes vectores de la cara para encontrar cuál apunta hacia arriba
-                Vector3[] vectors = {
-                    face.transform.up,
-                    -face.transform.up,
-                    face.transform.forward,
-                    -face.transform.forward,
-                    face.transform.right,
-                    -face.transform.right
-                };
-
-                foreach (Vector3 vector in vectors)
-                {
-                    float dot = Vector3.Dot(vector, Vector3.up);
-                    if (dot > maxDotProduct)
-                    {
-                        maxDotProduct = dot;
-                        caraSuperior = faceName;
-                    }
-                }
-            }
-        }
-
-        debugInfo.AppendLine($"    Cara mirando hacia arriba: {caraSuperior}");
-        debugInfo.AppendLine($"    Dot product máximo: {maxDotProduct:F3}");
-
-        // Verificar específicamente Face1
-        Transform face1 = cube.transform.Find("Face1");
-        if (face1 != null)
-        {
-            // Verificar cada posible orientación de Face1
-            Vector3 face1Normal = face1.transform.forward; // Normal de la cara
-            float dotForward = Vector3.Dot(face1.transform.forward, Vector3.up);
-            float dotBack = Vector3.Dot(-face1.transform.forward, Vector3.up);
-            float dotUp = Vector3.Dot(face1.transform.up, Vector3.up);
-            float dotDown = Vector3.Dot(-face1.transform.up, Vector3.up);
-            float dotRight = Vector3.Dot(face1.transform.right, Vector3.up);
-            float dotLeft = Vector3.Dot(-face1.transform.right, Vector3.up);
-
-            debugInfo.AppendLine($"    Face1 orientaciones:");
-            debugInfo.AppendLine($"      Forward: {dotForward:F3}");
-            debugInfo.AppendLine($"      Back: {dotBack:F3}");
-            debugInfo.AppendLine($"      Up: {dotUp:F3}");
-            debugInfo.AppendLine($"      Down: {dotDown:F3}");
-            debugInfo.AppendLine($"      Right: {dotRight:F3}");
-            debugInfo.AppendLine($"      Left: {dotLeft:F3}");
-
-            float maxFace1Dot = Mathf.Max(dotForward, dotBack, dotUp, dotDown, dotRight, dotLeft);
-
-            if (caraSuperior == "Face1" && maxFace1Dot > 0.9f)
-            {
-                debugInfo.AppendLine($"    ✓ Face1 está mirando hacia ARRIBA");
-                debugInfo.AppendLine($"    Esta es la cara con la parte del puzzle [{row},{col}]");
-            }
-            else if (maxFace1Dot > 0.9f)
-            {
-                debugInfo.AppendLine($"    ⚠ Face1 PODRÍA estar arriba con rotación");
-                debugInfo.AppendLine($"    Necesita girar el cubo para que Face1 esté visible");
-            }
-            else
-            {
-                debugInfo.AppendLine($"    ✗ Face1 NO está mirando hacia arriba");
-                debugInfo.AppendLine($"    Cara superior actual: {caraSuperior}");
-                debugInfo.AppendLine($"    La imagen del puzzle NO está visible correctamente");
-            }
-        }
-        else
-        {
-            debugInfo.AppendLine($"    ERROR: No se encuentra Face1 en el cubo");
-        }
-    }
-
-    private void UpdateDebugText()
-    {
-        if (debugText != null && debugMode)
-        {
-            debugText.text = debugInfo.ToString();
-        }
-    }
 
     public void StartDelayedCheck()
     {
@@ -741,11 +688,12 @@ public class GameGenerator : MonoBehaviour
             return Vector3.zero;
         }
     }
-
+    // Modifica el método OnImageSelected para resetear la bandera cuando se selecciona un nuevo puzzle:
     public void OnImageSelected(Image image)
     {
         elapsedTime = 0f;
         isTimerRunning = false;
+        timeAlreadySaved = false; // IMPORTANTE: Resetear cuando se selecciona un nuevo puzzle
 
         if (timerText != null)
         {
@@ -756,7 +704,107 @@ public class GameGenerator : MonoBehaviour
         otherPuzzleMaterials.Clear();
         GenerateMaterialsFromPanelImages();
 
-        UpdateDebugInfo($"Imagen seleccionada: {image.sprite.name}");
+        // Actualizar el índice del puzzle actual
+        UpdateCurrentPuzzleIndex();
+
+        UpdateDebugInfo($"Imagen seleccionada: {image.sprite.name} (Índice: {currentPuzzleIndex})");
+    }
+
+    // Modifica el método LoadNextPuzzle para resetear la bandera:
+    private void LoadNextPuzzle()
+    {
+        if (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1)
+        {
+            // Cerrar el panel de resultado
+            resultPanel.SetActive(false);
+
+            // Resetear la bandera para el siguiente puzzle
+            timeAlreadySaved = false;
+
+            // Limpiar el puzzle actual
+            ClearCurrentMagnets();
+            ClearCurrentCubes();
+
+            // Incrementar al siguiente puzzle
+            currentPuzzleIndex++;
+
+            // Activar el siguiente puzzle
+            GameObject nextPuzzle = availablePuzzles[currentPuzzleIndex];
+
+            var toggle = nextPuzzle.GetComponent<UnityEngine.UI.Toggle>();
+            if (toggle != null)
+            {
+                // Desactivar todos los otros toggles primero
+                foreach (var puzzle in availablePuzzles)
+                {
+                    var t = puzzle.GetComponent<UnityEngine.UI.Toggle>();
+                    if (t != null && t != toggle)
+                    {
+                        t.isOn = false;
+                    }
+                }
+
+                // Activar el siguiente toggle
+                toggle.isOn = true;
+
+                UpdateDebugInfo($"Cargando siguiente puzzle: {nextPuzzle.name}");
+            }
+            else
+            {
+                Debug.LogError($"No se encontró Toggle en {nextPuzzle.name}");
+            }
+        }
+        else
+        {
+            // No hay más puzzles, solo cerrar el panel
+            CloseResultPanel();
+            UpdateDebugInfo("No hay más puzzles disponibles");
+        }
+    }
+
+    // NUEVO: Método para actualizar el índice del puzzle actual
+    private void UpdateCurrentPuzzleIndex()
+    {
+        // Buscar cuál toggle está activo
+        for (int i = 0; i < availablePuzzles.Count; i++)
+        {
+            var toggle = availablePuzzles[i].GetComponent<UnityEngine.UI.Toggle>();
+            if (toggle != null && toggle.isOn)
+            {
+                currentPuzzleIndex = i;
+                Debug.Log($"Puzzle actual índice: {currentPuzzleIndex} de {availablePuzzles.Count}");
+                return;
+            }
+        }
+
+        currentPuzzleIndex = -1;
+    }
+
+    // OPCIONAL: Método para saltar a un puzzle específico (útil para debugging)
+    public void JumpToPuzzle(int index)
+    {
+        if (index >= 0 && index < availablePuzzles.Count)
+        {
+            currentPuzzleIndex = index;
+            GameObject targetPuzzle = availablePuzzles[index];
+            var toggle = targetPuzzle.GetComponent<UnityEngine.UI.Toggle>();
+
+            if (toggle != null)
+            {
+                // Desactivar todos los otros toggles
+                foreach (var puzzle in availablePuzzles)
+                {
+                    var t = puzzle.GetComponent<UnityEngine.UI.Toggle>();
+                    if (t != null && t != toggle)
+                    {
+                        t.isOn = false;
+                    }
+                }
+
+                // Activar el toggle objetivo
+                toggle.isOn = true;
+            }
+        }
     }
 
     void GenerateMaterialsFromPanelImages()
