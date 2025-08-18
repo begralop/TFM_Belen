@@ -117,25 +117,6 @@ public class GameGenerator : MonoBehaviour
         debugText.text = debugInfo.ToString();
     }
 
-    // NUEVO: Método para recolectar todos los puzzles disponibles
-    private void CollectAvailablePuzzles()
-    {
-        // Buscar todos los ImagePanelController en la escena
-        ImagePanelController[] controllers = FindObjectsOfType<ImagePanelController>();
-
-        availablePuzzles.Clear();
-        foreach (var controller in controllers)
-        {
-            availablePuzzles.Add(controller.gameObject);
-        }
-
-        // Ordenar por nombre para mantener un orden consistente
-        availablePuzzles.Sort((a, b) => a.name.CompareTo(b.name));
-
-        Debug.Log($"Se encontraron {availablePuzzles.Count} puzzles disponibles");
-    }
-
-
     void StartTimer()
     {
         elapsedTime = 0f;
@@ -710,7 +691,6 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo($"Imagen seleccionada: {image.sprite.name} (Índice: {currentPuzzleIndex})");
     }
 
-    // Modifica el método LoadNextPuzzle para resetear la bandera:
     private void LoadNextPuzzle()
     {
         if (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1)
@@ -731,6 +711,8 @@ public class GameGenerator : MonoBehaviour
             // Activar el siguiente puzzle
             GameObject nextPuzzle = availablePuzzles[currentPuzzleIndex];
 
+            UpdateDebugInfo($"Intentando cargar puzzle: {nextPuzzle.name} (índice {currentPuzzleIndex})");
+
             var toggle = nextPuzzle.GetComponent<UnityEngine.UI.Toggle>();
             if (toggle != null)
             {
@@ -747,7 +729,9 @@ public class GameGenerator : MonoBehaviour
                 // Activar el siguiente toggle
                 toggle.isOn = true;
 
-                UpdateDebugInfo($"Cargando siguiente puzzle: {nextPuzzle.name}");
+                // IMPORTANTE: Forzar la actualización del puzzle
+                // Esperar un frame y luego generar el juego
+                StartCoroutine(GenerateNextPuzzleAfterDelay());
             }
             else
             {
@@ -759,6 +743,94 @@ public class GameGenerator : MonoBehaviour
             // No hay más puzzles, solo cerrar el panel
             CloseResultPanel();
             UpdateDebugInfo("No hay más puzzles disponibles");
+        }
+    }
+
+    // NUEVO: Corrutina para generar el puzzle después de un pequeño retraso
+    private IEnumerator GenerateNextPuzzleAfterDelay()
+    {
+        // Esperar un frame para que el toggle se active completamente
+        yield return null;
+
+        // Verificar que se haya seleccionado correctamente la imagen
+        GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
+        if (curvedBackground != null)
+        {
+            Image bgImage = curvedBackground.GetComponent<Image>();
+            if (bgImage != null && bgImage.sprite != null)
+            {
+                UpdateDebugInfo($"Imagen del siguiente puzzle cargada: {bgImage.sprite.name}");
+
+                // Si el playButton existe y necesita ser presionado
+                if (playButton != null)
+                {
+                    // Simular el click del botón play
+                    playButton.onClick.Invoke();
+                }
+                else
+                {
+                    // Si no hay playButton, generar directamente
+                    GenerateGame();
+                }
+            }
+            else
+            {
+                Debug.LogError("No se pudo obtener el sprite del curvedBackground");
+                UpdateDebugInfo("ERROR: No se pudo cargar la imagen del puzzle");
+            }
+        }
+        else
+        {
+            Debug.LogError("No se encontró el curvedBackground");
+        }
+    }
+
+    // También mejora el método CollectAvailablePuzzles para ser más robusto:
+    private void CollectAvailablePuzzles()
+    {
+        // Limpiar la lista anterior
+        availablePuzzles.Clear();
+
+        // Método 1: Buscar por ImagePanelController
+        ImagePanelController[] controllers = FindObjectsOfType<ImagePanelController>();
+
+        foreach (var controller in controllers)
+        {
+            // Verificar que el GameObject tenga un Toggle
+            if (controller.gameObject.GetComponent<Toggle>() != null)
+            {
+                availablePuzzles.Add(controller.gameObject);
+            }
+        }
+
+        // Si no encontró ninguno, intentar buscar directamente los Toggles con el patrón de nombre
+        if (availablePuzzles.Count == 0)
+        {
+            Debug.LogWarning("No se encontraron puzzles por ImagePanelController, buscando por nombre...");
+
+            // Buscar todos los GameObjects que contengan "RoundedBoxToggle" en el nombre
+            GameObject[] allObjects = FindObjectsOfType<GameObject>();
+            foreach (var obj in allObjects)
+            {
+                if (obj.name.Contains("RoundedBoxToggle") && obj.GetComponent<Toggle>() != null)
+                {
+                    availablePuzzles.Add(obj);
+                }
+            }
+        }
+
+        // Ordenar por nombre para mantener un orden consistente
+        availablePuzzles.Sort((a, b) => a.name.CompareTo(b.name));
+
+        Debug.Log($"Se encontraron {availablePuzzles.Count} puzzles disponibles:");
+        for (int i = 0; i < availablePuzzles.Count; i++)
+        {
+            Debug.Log($"  {i}: {availablePuzzles[i].name}");
+        }
+
+        if (availablePuzzles.Count == 0)
+        {
+            Debug.LogError("¡ADVERTENCIA! No se encontraron puzzles disponibles en la escena");
         }
     }
 
