@@ -31750,7 +31750,7 @@ MonoBehaviour:
   timesText: {fileID: 1101073789}
   attemptsText: {fileID: 2074925584}
   datesText: {fileID: 1968629412}
-  maxRecordsToShow: 12
+  maxRecordsToShow: 13
 --- !u!4 &1490813627
 Transform:
   m_ObjectHideFlags: 0

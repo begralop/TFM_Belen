@@ -163,9 +163,13 @@ public class GameGenerator : MonoBehaviour
         }
 
         resultAlreadyShown = true; // Marcar que ya se mostró el resultado
-        resultPanel.SetActive(true);
 
-        UpdateDebugInfo($"Mostrando resultado: {(isSuccess ? "ÉXITO" : "FALLO")} - Total intentos realizados: {currentAttempts}");
+        // INCREMENTAR EL CONTADOR DE INTENTOS SIEMPRE (tanto si falla como si tiene éxito)
+        // Esto se hace AQUÍ para asegurar que solo se cuenta una vez por verificación
+        currentAttempts++;
+        UpdateDebugInfo($"RESULTADO: Este es el intento número {currentAttempts} - {(isSuccess ? "ÉXITO" : "FALLO")}");
+
+        resultPanel.SetActive(true);
 
         continueButton.onClick.RemoveAllListeners();
         restartButton.onClick.RemoveAllListeners();
@@ -234,10 +238,6 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            // YA NO INCREMENTAMOS AQUÍ porque se incrementa en CheckPuzzleCompletion
-
-            UpdateDebugInfo($"FALLO: Total de intentos realizados: {currentAttempts}");
-
             string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
             resultMessageText.text = $"No has completado el puzle correctamente. Llevas {attemptText}. ¿Quieres seguir intentándolo?";
 
@@ -349,11 +349,6 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo("INICIANDO VERIFICACIÓN COMPLETA DEL PUZZLE");
 
         isTimerRunning = false;
-
-        // INCREMENTAR EL CONTADOR DE INTENTOS SIEMPRE (tanto si falla como si tiene éxito)
-        currentAttempts++;
-        UpdateDebugInfo($"VERIFICACIÓN: Este es el intento número {currentAttempts}");
-
         bool puzzleEsCorrecto = IsPuzzleComplete();
         ShowResult(puzzleEsCorrecto);
     }
