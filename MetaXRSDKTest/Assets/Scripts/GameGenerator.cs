@@ -25,6 +25,10 @@ public class GameGenerator : MonoBehaviour
     // Añade una variable para controlar si ya se guardó el tiempo
     private bool timeAlreadySaved = false;
 
+    [Header("Sistema de Intentos")]
+    private int currentAttempts = 0; // Contador de intentos actual
+    private bool resultAlreadyShown = false; // Bandera para evitar mostrar resultado múltiples veces
+
     // --- PANEL DE DEBUG ---
     [Header("Panel de Debug")]
     [Tooltip("Panel de Canvas para mostrar información de debug")]
@@ -49,7 +53,6 @@ public class GameGenerator : MonoBehaviour
     public Button continueButton;
     [Tooltip("El boton para reiniciar la partida.")]
     public Button restartButton;
-
 
     [Header("Sistema de Progresión de Puzzles")]
     private int currentPuzzleIndex = -1; // Índice del puzzle actual
@@ -112,8 +115,6 @@ public class GameGenerator : MonoBehaviour
     void UpdateDebugInfo(string message)
     {
         debugInfo.AppendLine($"Mensaje: {message}");
-
-
         debugText.text = debugInfo.ToString();
     }
 
@@ -124,8 +125,6 @@ public class GameGenerator : MonoBehaviour
 
         if (timerPanel != null)
             timerPanel.SetActive(true);
-
-
     }
 
     void Update()
@@ -137,7 +136,6 @@ public class GameGenerator : MonoBehaviour
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
             timerText.text = $"{minutes:00}:{seconds:00}";
         }
-
     }
 
     public void Logout()
@@ -153,12 +151,21 @@ public class GameGenerator : MonoBehaviour
 
         SceneManager.LoadScene(loginSceneName);
     }
-    // Modifica el método ShowResult para cambiar el comportamiento del botón continuar:
+
+    // Modifica el método ShowResult para evitar llamadas múltiples:
     private void ShowResult(bool isSuccess)
     {
+        // EVITAR MOSTRAR RESULTADO MÚLTIPLES VECES
+        if (resultAlreadyShown)
+        {
+            UpdateDebugInfo("ShowResult ya fue llamado, evitando duplicado");
+            return;
+        }
+
+        resultAlreadyShown = true; // Marcar que ya se mostró el resultado
         resultPanel.SetActive(true);
 
-        UpdateDebugInfo($"Mostrando resultado: {(isSuccess ? "ÉXITO" : "FALLO")}");
+        UpdateDebugInfo($"Mostrando resultado: {(isSuccess ? "ÉXITO" : "FALLO")} - Total intentos realizados: {currentAttempts}");
 
         continueButton.onClick.RemoveAllListeners();
         restartButton.onClick.RemoveAllListeners();
@@ -175,12 +182,12 @@ public class GameGenerator : MonoBehaviour
                 // Obtener el ID del puzzle actual
                 string puzzleId = GetCurrentPuzzleId();
 
-                // Guardar el tiempo para el usuario actual
+                // Guardar el tiempo para el usuario actual CON LOS INTENTOS
                 string currentUser = UserManager.GetCurrentUser();
                 if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
                 {
-                    UserManager.AddScore(currentUser, puzzleId, elapsedTime);
-                    Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s");
+                    UserManager.AddScore(currentUser, puzzleId, elapsedTime, currentAttempts);
+                    Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s, Intentos={currentAttempts}");
                     timeAlreadySaved = true; // Marcar que ya se guardó
                 }
             }
@@ -189,16 +196,18 @@ public class GameGenerator : MonoBehaviour
                 Debug.Log("El tiempo ya fue guardado anteriormente, evitando duplicado");
             }
 
-            // Mostrar el mensaje de éxito con el tiempo
+            // Mostrar el mensaje de éxito con el tiempo Y LOS INTENTOS
             int minutes = Mathf.FloorToInt(elapsedTime / 60f);
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
 
             // MODIFICADO: Cambiar el texto del botón y su función según si hay más puzzles
             bool hasNextPuzzle = (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1);
 
+            string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
+
             if (hasNextPuzzle)
             {
-                resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00}.\n¿Quieres continuar con el siguiente puzzle?";
+                resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00} con {attemptText}.\n¿Quieres continuar con el siguiente puzzle?";
 
                 // Cambiar el texto del botón
                 var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
@@ -211,7 +220,7 @@ public class GameGenerator : MonoBehaviour
             }
             else
             {
-                resultMessageText.text = $"¡Felicidades! Has completado el puzle en {minutes:00}:{seconds:00}.\n¡Has completado todos los puzzles disponibles!";
+                resultMessageText.text = $"¡Felicidades! Has completado el puzle en {minutes:00}:{seconds:00} con {attemptText}.\n¡Has completado todos los puzzles disponibles!";
 
                 // Cambiar el texto del botón
                 var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
@@ -225,9 +234,14 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            resultMessageText.text = "No has completado el puzle correctamente. ¿Quieres seguir intentándolo?";
+            // YA NO INCREMENTAMOS AQUÍ porque se incrementa en CheckPuzzleCompletion
 
-            // Asegurarse de que el texto del botón sea "Continuar"
+            UpdateDebugInfo($"FALLO: Total de intentos realizados: {currentAttempts}");
+
+            string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
+            resultMessageText.text = $"No has completado el puzle correctamente. Llevas {attemptText}. ¿Quieres seguir intentándolo?";
+
+            // Asegurarse de que el texto del botón sea "Reintentar"
             var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
             if (continueButtonText != null)
             {
@@ -237,7 +251,6 @@ public class GameGenerator : MonoBehaviour
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
     }
-
 
     // NUEVO: Método auxiliar para obtener el ID del puzzle actual
     private string GetCurrentPuzzleId()
@@ -264,15 +277,17 @@ public class GameGenerator : MonoBehaviour
     public void CloseResultPanel()
     {
         resultPanel.SetActive(false);
-        UpdateDebugInfo("Panel de resultado cerrado");
+        resultAlreadyShown = false; // Resetear la bandera cuando se cierra el panel
+        UpdateDebugInfo("Panel de resultado cerrado - Bandera reseteada");
     }
 
     public void ContinueGameAfterWarning()
     {
         resultPanel.SetActive(false);
+        resultAlreadyShown = false; // Resetear la bandera para permitir nueva verificación
         isTimerRunning = true;
 
-        UpdateDebugInfo("Continuando juego - Empujando piezas");
+        UpdateDebugInfo("Continuando juego - Empujando piezas - Bandera reseteada");
 
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
         Vector3 puzzleCenter = tableCenterObject.transform.position;
@@ -293,6 +308,7 @@ public class GameGenerator : MonoBehaviour
     public void RestartGame()
     {
         resultPanel.SetActive(false);
+        resultAlreadyShown = false; // Resetear la bandera
         placedCubesCount = 0;
         elapsedTime = 0f;
         timerText.text = "00:00";
@@ -300,11 +316,14 @@ public class GameGenerator : MonoBehaviour
         puzzleCompleted = false;
         timeAlreadySaved = false;
 
+        // REINICIAR EL CONTADOR DE INTENTOS
+        currentAttempts = 0;
+
         ClearCurrentMagnets();
         ClearCurrentCubes();
         GenerateGame();
 
-        UpdateDebugInfo("Juego reiniciado");
+        UpdateDebugInfo("Juego reiniciado - Intentos reiniciados a 0 - Bandera reseteada");
     }
 
     public void OnCubePlaced()
@@ -330,6 +349,11 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo("INICIANDO VERIFICACIÓN COMPLETA DEL PUZZLE");
 
         isTimerRunning = false;
+
+        // INCREMENTAR EL CONTADOR DE INTENTOS SIEMPRE (tanto si falla como si tiene éxito)
+        currentAttempts++;
+        UpdateDebugInfo($"VERIFICACIÓN: Este es el intento número {currentAttempts}");
+
         bool puzzleEsCorrecto = IsPuzzleComplete();
         ShowResult(puzzleEsCorrecto);
     }
@@ -390,7 +414,7 @@ public class GameGenerator : MonoBehaviour
 
                 // 2. DESCOMENTAMOS LA LÍNEA PARA APLICAR LA POSICIÓN FINAL
                 // Esta es la línea clave que faltaba. Ahora el cubo se ajustará a su sitio.
-               // cube.transform.position = targetPosition;
+                // cube.transform.position = targetPosition;
 
                 // La rotación ya estaba correcta.
                 cube.transform.rotation = targetRotation;
@@ -418,7 +442,6 @@ public class GameGenerator : MonoBehaviour
         return todosCorrectos;
     }
 
-
     public void StartDelayedCheck()
     {
         StartCoroutine(CheckPuzzleAfterDelay());
@@ -430,7 +453,6 @@ public class GameGenerator : MonoBehaviour
         yield return new WaitForSeconds(0.2f);
         CheckPuzzleCompletion();
     }
-
 
     void PositionPanel(GameObject panel)
     {
@@ -466,7 +488,11 @@ public class GameGenerator : MonoBehaviour
     void GenerateGame()
     {
         placedCubesCount = 0;
-        UpdateDebugInfo("Generando nuevo juego...");
+        // REINICIAR INTENTOS CADA VEZ QUE SE GENERA UN JUEGO (al presionar Play)
+        // IMPORTANTE: Debe empezar desde 0, no desde 1
+        currentAttempts = 0;
+        resultAlreadyShown = false; // Resetear la bandera también
+        UpdateDebugInfo($"Generando nuevo juego - Intentos inicializados a {currentAttempts}...");
 
         var grid = GameObject.FindGameObjectWithTag("Grid");
         var curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
@@ -669,12 +695,24 @@ public class GameGenerator : MonoBehaviour
             return Vector3.zero;
         }
     }
-    // Modifica el método OnImageSelected para resetear la bandera cuando se selecciona un nuevo puzzle:
+
+    // Modifica el método OnImageSelected para resetear todos los contadores cuando se selecciona un nuevo puzzle:
     public void OnImageSelected(Image image)
     {
+        // OCULTAR EL PANEL DE RESULTADO AL SELECCIONAR CUALQUIER PUZZLE
+        if (resultPanel != null && resultPanel.activeSelf)
+        {
+            resultPanel.SetActive(false);
+        }
+
+        // REINICIAR TODOS LOS CONTADORES AL SELECCIONAR UN NUEVO PUZZLE
         elapsedTime = 0f;
         isTimerRunning = false;
-        timeAlreadySaved = false; // IMPORTANTE: Resetear cuando se selecciona un nuevo puzzle
+        timeAlreadySaved = false;
+        currentAttempts = 0; // Esto es crítico - siempre a 0 al cambiar puzzle
+        placedCubesCount = 0;
+        puzzleCompleted = false;
+        resultAlreadyShown = false; // Resetear la bandera también
 
         if (timerText != null)
         {
@@ -688,7 +726,7 @@ public class GameGenerator : MonoBehaviour
         // Actualizar el índice del puzzle actual
         UpdateCurrentPuzzleIndex();
 
-        UpdateDebugInfo($"Imagen seleccionada: {image.sprite.name} (Índice: {currentPuzzleIndex})");
+        UpdateDebugInfo($"Nuevo puzzle seleccionado: {image.sprite.name} (Índice: {currentPuzzleIndex}) - Panel cerrado y contadores reiniciados - Intentos: {currentAttempts}");
     }
 
     private void LoadNextPuzzle()
@@ -700,6 +738,7 @@ public class GameGenerator : MonoBehaviour
 
             // Resetear la bandera para el siguiente puzzle
             timeAlreadySaved = false;
+            currentAttempts = 0; // REINICIAR INTENTOS PARA EL SIGUIENTE PUZZLE
 
             // Limpiar el puzzle actual
             ClearCurrentMagnets();
@@ -711,7 +750,7 @@ public class GameGenerator : MonoBehaviour
             // Activar el siguiente puzzle
             GameObject nextPuzzle = availablePuzzles[currentPuzzleIndex];
 
-            UpdateDebugInfo($"Intentando cargar puzzle: {nextPuzzle.name} (índice {currentPuzzleIndex})");
+            UpdateDebugInfo($"Intentando cargar puzzle: {nextPuzzle.name} (índice {currentPuzzleIndex}) - Intentos reiniciados");
 
             var toggle = nextPuzzle.GetComponent<UnityEngine.UI.Toggle>();
             if (toggle != null)

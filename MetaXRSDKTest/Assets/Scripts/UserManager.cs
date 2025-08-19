@@ -2,17 +2,33 @@ using UnityEngine;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using System.IO;
+using System;
 
 // --- ESTRUCTURA DE DATOS MEJORADA ---
+[System.Serializable]
+public class ScoreEntry
+{
+    public float time;
+    public int attempts;
+    public string date;
+
+    public ScoreEntry(float time, int attempts, string date)
+    {
+        this.time = time;
+        this.attempts = attempts;
+        this.date = date;
+    }
+}
+
 public class UserData
 {
     // Mantenemos la lista de usuarios y el usuario actual
     public List<string> Usernames = new List<string>();
     public string CurrentUser;
 
-    // AÑADIMOS LA ESTRUCTURA PARA GUARDAR PUNTUACIONES
-    // Diccionario<usuario, Diccionario<id_del_puzle, Lista_de_tiempos>>
-    public Dictionary<string, Dictionary<string, List<float>>> UserScores = new Dictionary<string, Dictionary<string, List<float>>>();
+    // MODIFICAMOS LA ESTRUCTURA PARA GUARDAR PUNTUACIONES CON INTENTOS Y FECHA
+    // Diccionario<usuario, Diccionario<id_del_puzle, Lista_de_ScoreEntry>>
+    public Dictionary<string, Dictionary<string, List<ScoreEntry>>> UserScores = new Dictionary<string, Dictionary<string, List<ScoreEntry>>>();
 }
 
 public static class UserManager
@@ -35,12 +51,21 @@ public static class UserManager
         string filePath = GetFilePath();
         if (File.Exists(filePath))
         {
-            string jsonData = File.ReadAllText(filePath);
-            localUserData = JsonConvert.DeserializeObject<UserData>(jsonData);
-            // Asegurarse de que el diccionario de puntuaciones nunca sea nulo
-            if (localUserData.UserScores == null)
+            try
             {
-                localUserData.UserScores = new Dictionary<string, Dictionary<string, List<float>>>();
+                string jsonData = File.ReadAllText(filePath);
+                localUserData = JsonConvert.DeserializeObject<UserData>(jsonData);
+
+                // Asegurarse de que el diccionario de puntuaciones nunca sea nulo
+                if (localUserData.UserScores == null)
+                {
+                    localUserData.UserScores = new Dictionary<string, Dictionary<string, List<ScoreEntry>>>();
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"Error al cargar datos de usuario: {e.Message}. Creando nuevos datos.");
+                localUserData = new UserData();
             }
         }
         else
@@ -55,35 +80,47 @@ public static class UserManager
         File.WriteAllText(GetFilePath(), jsonData);
     }
 
-    // --- NUEVOS MÉTODOS PARA GESTIONAR PUNTUACIONES ---
+    // --- NUEVOS MÉTODOS PARA GESTIONAR PUNTUACIONES CON INTENTOS ---
 
     /// <summary>
-    /// Añade una nueva puntuación (tiempo) para un usuario y un puzle específicos.
+    /// Añade una nueva puntuación (tiempo, intentos y fecha) para un usuario y un puzle específicos.
     /// </summary>
-    public static void AddScore(string username, string puzzleId, float time)
+    public static void AddScore(string username, string puzzleId, float time, int attempts)
     {
         // Si el usuario no existe en el diccionario de puntuaciones, lo creamos
         if (!localUserData.UserScores.ContainsKey(username))
         {
-            localUserData.UserScores[username] = new Dictionary<string, List<float>>();
+            localUserData.UserScores[username] = new Dictionary<string, List<ScoreEntry>>();
         }
 
-        // Si el puzle no existe para ese usuario, creamos la lista de tiempos
+        // Si el puzle no existe para ese usuario, creamos la lista de puntuaciones
         if (!localUserData.UserScores[username].ContainsKey(puzzleId))
         {
-            localUserData.UserScores[username][puzzleId] = new List<float>();
+            localUserData.UserScores[username][puzzleId] = new List<ScoreEntry>();
         }
 
-        // Añadimos el nuevo tiempo y guardamos los datos
-        localUserData.UserScores[username][puzzleId].Add(time);
+        // Crear la fecha actual en formato dd/MM/yyyy
+        string currentDate = System.DateTime.Now.ToString("dd/MM/yyyy");
+
+        // Añadimos la nueva puntuación y guardamos los datos
+        ScoreEntry newScore = new ScoreEntry(time, attempts, currentDate);
+        localUserData.UserScores[username][puzzleId].Add(newScore);
         SaveData();
-        Debug.Log($"Puntuación guardada: Usuario={username}, Puzle={puzzleId}, Tiempo={time}");
+        Debug.Log($"Puntuación guardada: Usuario={username}, Puzle={puzzleId}, Tiempo={time}, Intentos={attempts}, Fecha={currentDate}");
     }
 
     /// <summary>
-    /// Devuelve la lista de tiempos para un usuario y un puzle. Si no hay, devuelve una lista vacía.
+    /// Versión de compatibilidad del método anterior (sin intentos)
     /// </summary>
-    public static List<float> GetScores(string username, string puzzleId)
+    public static void AddScore(string username, string puzzleId, float time)
+    {
+        AddScore(username, puzzleId, time, 1); // Por defecto 1 intento
+    }
+
+    /// <summary>
+    /// Devuelve la lista de puntuaciones para un usuario y un puzle. Si no hay, devuelve una lista vacía.
+    /// </summary>
+    public static List<ScoreEntry> GetScoreEntries(string username, string puzzleId)
     {
         if (localUserData.UserScores.ContainsKey(username) &&
             localUserData.UserScores[username].ContainsKey(puzzleId))
@@ -92,7 +129,23 @@ public static class UserManager
         }
 
         // Si no se encuentran puntuaciones, devolver una lista vacía para evitar errores
-        return new List<float>();
+        return new List<ScoreEntry>();
+    }
+
+    /// <summary>
+    /// Devuelve solo los tiempos para compatibilidad con código existente
+    /// </summary>
+    public static List<float> GetScores(string username, string puzzleId)
+    {
+        List<ScoreEntry> entries = GetScoreEntries(username, puzzleId);
+        List<float> times = new List<float>();
+
+        foreach (ScoreEntry entry in entries)
+        {
+            times.Add(entry.time);
+        }
+
+        return times;
     }
 
     // --- MÉTODOS EXISTENTES (sin cambios) ---

@@ -11,12 +11,19 @@ public class PuzzleScoreDisplay : MonoBehaviour
     [Tooltip("Panel que contendrá la información de puntuaciones")]
     public GameObject scorePanel;
 
-    [Header("Componentes de UI")]
-    public TextMeshProUGUI allTimesText;
+    [Header("Componentes de UI - Tres TextMesh separados")]
+    [Tooltip("TextMesh para mostrar los tiempos (ej: '1. 01:30')")]
+    public TextMeshProUGUI timesText;
+
+    [Tooltip("TextMesh para mostrar los intentos (ej: '2 intentos')")]
+    public TextMeshProUGUI attemptsText;
+
+    [Tooltip("TextMesh para mostrar las fechas (ej: '27/08/2025')")]
+    public TextMeshProUGUI datesText;
 
     [Header("Configuración")]
-    [Tooltip("Número máximo de tiempos a mostrar")]
-    public int maxTimesToShow = 5;
+    [Tooltip("Número máximo de registros a mostrar")]
+    public int maxRecordsToShow = 5;
 
     private string currentPuzzleId;
     private Sprite currentPuzzleSprite;
@@ -55,51 +62,79 @@ public class PuzzleScoreDisplay : MonoBehaviour
     }
 
     /// <summary>
-    /// Actualiza la visualización de puntuaciones
+    /// Actualiza la visualización de puntuaciones con tiempo, intentos y fecha separados
     /// </summary>
     private void UpdateScoreDisplay()
     {
         string currentUser = UserManager.GetCurrentUser();
-        List<float> scores = UserManager.GetScores(currentUser, currentPuzzleId);
+        List<ScoreEntry> scoreEntries = UserManager.GetScoreEntries(currentUser, currentPuzzleId);
 
-        if (scores == null || scores.Count == 0)
+        if (scoreEntries == null || scoreEntries.Count == 0)
         {
-            if (allTimesText != null)
-            {
-                allTimesText.text = "Sin completar";
-            }
+            ShowNoScoresMessage();
         }
         else
         {
-            // Ordenar tiempos de menor a mayor
-            scores.Sort();
+            // Ordenar por tiempo (mejor tiempo primero)
+            scoreEntries = scoreEntries.OrderBy(entry => entry.time).ToList();
 
-            // Mostrar lista de mejores tiempos
-            if (allTimesText != null)
+            // Preparar los strings para cada columna
+            StringBuilder timesBuilder = new StringBuilder();
+            StringBuilder attemptsBuilder = new StringBuilder();
+            StringBuilder datesBuilder = new StringBuilder();
+
+            int recordsToShow = Mathf.Min(scoreEntries.Count, maxRecordsToShow);
+
+            for (int i = 0; i < recordsToShow; i++)
             {
-                StringBuilder sb = new StringBuilder();
+                ScoreEntry entry = scoreEntries[i];
 
-                int timesToShow = Mathf.Min(scores.Count, maxTimesToShow);
-                for (int i = 0; i < timesToShow; i++)
-                {
-                    string time = FormatTime(scores[i]);
-                    // LÍNEA CORREGIDA - Agregar cada tiempo a la lista
-                    sb.AppendLine($"{i + 1}. {time}");
-                }
+                // Columna de tiempos
+                string timeFormatted = FormatTime(entry.time);
+                timesBuilder.AppendLine($"{i + 1}. {timeFormatted}");
 
-                // Si hay más tiempos que los mostrados
-                if (scores.Count > maxTimesToShow)
-                {
-                    sb.AppendLine($"... y {scores.Count - maxTimesToShow} tiempo(s) más");
-                }
+                // Columna de intentos
+                string attemptText = entry.attempts == 1 ? "1 intento" : $"{entry.attempts} intentos";
+                attemptsBuilder.AppendLine(attemptText);
 
-                // Mostrar tiempo promedio
-               // float averageTime = scores.Average();
-             //   sb.AppendLine($"\n<b>Tiempo promedio:</b> {FormatTime(averageTime)}");
-
-                allTimesText.text = sb.ToString();
+                // Columna de fechas
+                datesBuilder.AppendLine(entry.date);
             }
+
+            // Si hay más registros que los mostrados
+            if (scoreEntries.Count > maxRecordsToShow)
+            {
+                int remainingRecords = scoreEntries.Count - maxRecordsToShow;
+                timesBuilder.AppendLine($"... y {remainingRecords} más");
+                attemptsBuilder.AppendLine("...");
+                datesBuilder.AppendLine("...");
+            }
+
+            // Asignar el texto a cada TextMeshProUGUI
+            if (timesText != null)
+                timesText.text = timesBuilder.ToString();
+
+            if (attemptsText != null)
+                attemptsText.text = attemptsBuilder.ToString();
+
+            if (datesText != null)
+                datesText.text = datesBuilder.ToString();
         }
+    }
+
+    /// <summary>
+    /// Muestra mensaje cuando no hay puntuaciones
+    /// </summary>
+    private void ShowNoScoresMessage()
+    {
+        if (timesText != null)
+            timesText.text = "--:--";
+
+        if (attemptsText != null)
+            attemptsText.text = "Sin intentar";
+
+        if (datesText != null)
+            datesText.text = "--/--/--";
     }
 
     /// <summary>
@@ -111,7 +146,6 @@ public class PuzzleScoreDisplay : MonoBehaviour
         int seconds = Mathf.FloorToInt(timeInSeconds % 60f);
         return $"{minutes:00}:{seconds:00}";
     }
-
 
     /// <summary>
     /// Oculta el panel de puntuaciones
@@ -133,5 +167,20 @@ public class PuzzleScoreDisplay : MonoBehaviour
         {
             UpdateScoreDisplay();
         }
+    }
+
+    /// <summary>
+    /// NUEVO: Método para validar que todos los TextMeshPro estén asignados
+    /// </summary>
+    void Awake()
+    {
+        if (timesText == null)
+            Debug.LogWarning("PuzzleScoreDisplay: timesText no está asignado en el Inspector");
+
+        if (attemptsText == null)
+            Debug.LogWarning("PuzzleScoreDisplay: attemptsText no está asignado en el Inspector");
+
+        if (datesText == null)
+            Debug.LogWarning("PuzzleScoreDisplay: datesText no está asignado en el Inspector");
     }
 }
