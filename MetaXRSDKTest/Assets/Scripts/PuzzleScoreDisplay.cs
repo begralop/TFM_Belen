@@ -11,12 +11,15 @@ public class PuzzleScoreDisplay : MonoBehaviour
     [Tooltip("Panel que contendrá la información de puntuaciones")]
     public GameObject scorePanel;
 
-    [Header("Componentes de UI - Tres TextMesh separados")]
+    [Header("Componentes de UI - Cuatro TextMesh separados")]
     [Tooltip("TextMesh para mostrar los tiempos (ej: '1. 01:30')")]
     public TextMeshProUGUI timesText;
 
     [Tooltip("TextMesh para mostrar los intentos (ej: '2 intentos')")]
     public TextMeshProUGUI attemptsText;
+
+    [Tooltip("TextMesh para mostrar el número de cubos (ej: '12 cubos')")]
+    public TextMeshProUGUI cubesText;
 
     [Tooltip("TextMesh para mostrar las fechas (ej: '27/08/2025')")]
     public TextMeshProUGUI datesText;
@@ -62,7 +65,7 @@ public class PuzzleScoreDisplay : MonoBehaviour
     }
 
     /// <summary>
-    /// Actualiza la visualización de puntuaciones con tiempo, intentos y fecha separados
+    /// Actualiza la visualización de puntuaciones con tiempo, intentos, cubos y fecha separados
     /// </summary>
     private void UpdateScoreDisplay()
     {
@@ -81,6 +84,7 @@ public class PuzzleScoreDisplay : MonoBehaviour
             // Preparar los strings para cada columna
             StringBuilder timesBuilder = new StringBuilder();
             StringBuilder attemptsBuilder = new StringBuilder();
+            StringBuilder cubesBuilder = new StringBuilder();
             StringBuilder datesBuilder = new StringBuilder();
 
             int recordsToShow = Mathf.Min(scoreEntries.Count, maxRecordsToShow);
@@ -94,8 +98,12 @@ public class PuzzleScoreDisplay : MonoBehaviour
                 timesBuilder.AppendLine($"{i + 1}. {timeFormatted}");
 
                 // Columna de intentos
-                string attemptText = entry.attempts == 1 ? "1 intento" : $"{entry.attempts} intentos";
+                string attemptText = entry.attempts == 1 ? "1" : $"{entry.attempts}";
                 attemptsBuilder.AppendLine(attemptText);
+
+                // Columna de cubos
+                string cubeText = entry.cubes == 0 ? "N/A" : (entry.cubes == 1 ? "1" : $"{entry.cubes}");
+                cubesBuilder.AppendLine(cubeText);
 
                 // Columna de fechas
                 datesBuilder.AppendLine(entry.date);
@@ -107,6 +115,7 @@ public class PuzzleScoreDisplay : MonoBehaviour
                 int remainingRecords = scoreEntries.Count - maxRecordsToShow;
                 timesBuilder.AppendLine($"... y {remainingRecords} más");
                 attemptsBuilder.AppendLine("...");
+                cubesBuilder.AppendLine("...");
                 datesBuilder.AppendLine("...");
             }
 
@@ -116,6 +125,9 @@ public class PuzzleScoreDisplay : MonoBehaviour
 
             if (attemptsText != null)
                 attemptsText.text = attemptsBuilder.ToString();
+
+            if (cubesText != null)
+                cubesText.text = cubesBuilder.ToString();
 
             if (datesText != null)
                 datesText.text = datesBuilder.ToString();
@@ -128,10 +140,13 @@ public class PuzzleScoreDisplay : MonoBehaviour
     private void ShowNoScoresMessage()
     {
         if (timesText != null)
-            timesText.text = "--:--";
+            timesText.text = "00:00";
 
         if (attemptsText != null)
-            attemptsText.text = "Sin intentar";
+            attemptsText.text = "-";
+
+        if (cubesText != null)
+            cubesText.text = "-";
 
         if (datesText != null)
             datesText.text = "--/--/--";
@@ -179,6 +194,9 @@ public class PuzzleScoreDisplay : MonoBehaviour
 
         if (attemptsText == null)
             Debug.LogWarning("PuzzleScoreDisplay: attemptsText no está asignado en el Inspector");
+
+        if (cubesText == null)
+            Debug.LogWarning("PuzzleScoreDisplay: cubesText no está asignado en el Inspector");
 
         if (datesText == null)
             Debug.LogWarning("PuzzleScoreDisplay: datesText no está asignado en el Inspector");

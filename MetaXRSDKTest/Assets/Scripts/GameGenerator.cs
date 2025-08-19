@@ -54,7 +54,9 @@ public class GameGenerator : MonoBehaviour
     [Tooltip("El boton para reiniciar la partida.")]
     public Button restartButton;
 
-    [Header("Sistema de Progresión de Puzzles")]
+    [Header("Sistema de Puntuaciones")]
+    [Tooltip("Referencia al sistema de visualización de puntuaciones")]
+    public PuzzleScoreDisplay scoreDisplay;
     private int currentPuzzleIndex = -1; // Índice del puzzle actual
     private List<GameObject> availablePuzzles = new List<GameObject>(); // Lista de todos los toggles de puzzles
 
@@ -90,6 +92,12 @@ public class GameGenerator : MonoBehaviour
         CollectAvailablePuzzles();
         // Asegúrate de que el panel esté desactivado al inicio
         resultPanel.SetActive(false);
+
+        // Buscar automáticamente el PuzzleScoreDisplay si no está asignado
+        if (scoreDisplay == null)
+        {
+            scoreDisplay = FindObjectOfType<PuzzleScoreDisplay>();
+        }
 
         // Activar panel de debug si está en modo debug
         if (debugPanel != null && debugMode)
@@ -190,9 +198,19 @@ public class GameGenerator : MonoBehaviour
                 string currentUser = UserManager.GetCurrentUser();
                 if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
                 {
-                    UserManager.AddScore(currentUser, puzzleId, elapsedTime, currentAttempts);
-                    Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s, Intentos={currentAttempts}");
+                    // CALCULAR EL NÚMERO TOTAL DE CUBOS DEL PUZZLE
+                    int totalCubes = rows * columns;
+
+                    UserManager.AddScore(currentUser, puzzleId, elapsedTime, currentAttempts, totalCubes);
+                    Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s, Intentos={currentAttempts}, Cubos={totalCubes}");
                     timeAlreadySaved = true; // Marcar que ya se guardó
+
+                    // ACTUALIZAR EL PANEL DE PUNTUACIONES después de guardar
+                    if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
+                    {
+                        // Esperar un frame para asegurar que los datos se hayan guardado correctamente
+                        StartCoroutine(RefreshScoreDisplayAfterDelay());
+                    }
                 }
             }
             else
@@ -322,6 +340,17 @@ public class GameGenerator : MonoBehaviour
         ClearCurrentMagnets();
         ClearCurrentCubes();
         GenerateGame();
+
+        // MANTENER EL PANEL DE PUNTUACIONES VISIBLE si ya estaba mostrado
+        if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
+        {
+            // Verificar si el panel de puntuaciones está activo
+            if (scoreDisplay.scorePanel != null && scoreDisplay.scorePanel.activeSelf)
+            {
+                // Refrescar las puntuaciones para mostrar el nuevo resultado guardado
+                StartCoroutine(RefreshScoreDisplayAfterRestart());
+            }
+        }
 
         UpdateDebugInfo("Juego reiniciado - Intentos reiniciados a 0 - Bandera reseteada");
     }
@@ -777,6 +806,32 @@ public class GameGenerator : MonoBehaviour
             // No hay más puzzles, solo cerrar el panel
             CloseResultPanel();
             UpdateDebugInfo("No hay más puzzles disponibles");
+        }
+    }
+
+    // NUEVO: Corrutina para refrescar el panel después de reiniciar
+    private IEnumerator RefreshScoreDisplayAfterRestart()
+    {
+        // Esperar un poco más para que el juego se haya reiniciado completamente
+        yield return new WaitForSeconds(0.1f);
+
+        if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
+        {
+            scoreDisplay.RefreshScores();
+            UpdateDebugInfo("Panel de puntuaciones refrescado después de reiniciar");
+        }
+    }
+
+    // NUEVO: Corrutina para refrescar el panel de puntuaciones después de un pequeño retraso
+    private IEnumerator RefreshScoreDisplayAfterDelay()
+    {
+        // Esperar un frame para que se complete el guardado
+        yield return null;
+
+        if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
+        {
+            scoreDisplay.ShowScoresForPuzzle(selectedImage.sprite);
+            UpdateDebugInfo("Panel de puntuaciones actualizado con nuevo resultado");
         }
     }
 

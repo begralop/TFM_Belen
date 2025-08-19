@@ -11,12 +11,23 @@ public class ScoreEntry
     public float time;
     public int attempts;
     public string date;
+    public int cubes; // NUEVO: Número de cubos del puzzle
 
+    public ScoreEntry(float time, int attempts, string date, int cubes)
+    {
+        this.time = time;
+        this.attempts = attempts;
+        this.date = date;
+        this.cubes = cubes;
+    }
+
+    // Constructor de compatibilidad para datos existentes
     public ScoreEntry(float time, int attempts, string date)
     {
         this.time = time;
         this.attempts = attempts;
         this.date = date;
+        this.cubes = 0; // Valor por defecto para registros antiguos
     }
 }
 
@@ -83,9 +94,9 @@ public static class UserManager
     // --- NUEVOS MÉTODOS PARA GESTIONAR PUNTUACIONES CON INTENTOS ---
 
     /// <summary>
-    /// Añade una nueva puntuación (tiempo, intentos y fecha) para un usuario y un puzle específicos.
+    /// Añade una nueva puntuación (tiempo, intentos, fecha y número de cubos) para un usuario y un puzle específicos.
     /// </summary>
-    public static void AddScore(string username, string puzzleId, float time, int attempts)
+    public static void AddScore(string username, string puzzleId, float time, int attempts, int cubes)
     {
         // Si el usuario no existe en el diccionario de puntuaciones, lo creamos
         if (!localUserData.UserScores.ContainsKey(username))
@@ -103,10 +114,18 @@ public static class UserManager
         string currentDate = System.DateTime.Now.ToString("dd/MM/yyyy");
 
         // Añadimos la nueva puntuación y guardamos los datos
-        ScoreEntry newScore = new ScoreEntry(time, attempts, currentDate);
+        ScoreEntry newScore = new ScoreEntry(time, attempts, currentDate, cubes);
         localUserData.UserScores[username][puzzleId].Add(newScore);
         SaveData();
-        Debug.Log($"Puntuación guardada: Usuario={username}, Puzle={puzzleId}, Tiempo={time}, Intentos={attempts}, Fecha={currentDate}");
+        Debug.Log($"Puntuación guardada: Usuario={username}, Puzle={puzzleId}, Tiempo={time}, Intentos={attempts}, Cubos={cubes}, Fecha={currentDate}");
+    }
+
+    /// <summary>
+    /// Versión de compatibilidad del método anterior (sin cubos)
+    /// </summary>
+    public static void AddScore(string username, string puzzleId, float time, int attempts)
+    {
+        AddScore(username, puzzleId, time, attempts, 0); // Por defecto 0 cubos para compatibilidad
     }
 
     /// <summary>
