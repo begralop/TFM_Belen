@@ -16,6 +16,11 @@ public class GameGenerator : MonoBehaviour
     [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
     public string loginSceneName;
 
+
+    [Header("Sistema de Pistas")]
+    [Tooltip("Referencia al sistema de pistas")]
+    public HintSystem hintSystem;
+
     [Header("Contador de Tiempo")]
     public GameObject timerPanel;
     public TextMeshProUGUI timerText;
@@ -74,6 +79,7 @@ public class GameGenerator : MonoBehaviour
 
     public Button playButton;
     public TextMeshProUGUI welcomeText;
+    public TextMeshProUGUI welcomeHintText;
 
     private int placedCubesCount = 0;
     private bool puzzleCompleted = false;
@@ -108,11 +114,19 @@ public class GameGenerator : MonoBehaviour
 
         ClearCurrentMagnets();
         ClearCurrentCubes();
-
+        if (hintSystem == null)
+        {
+            hintSystem = FindObjectOfType<HintSystem>();
+        }
         if (welcomeText != null)
         {
             string playerName = UserManager.GetCurrentUser();
             welcomeText.text = $"Elige un puzzle, {playerName}";
+        }
+        if (welcomeHintText != null)
+        {
+            string playerName = UserManager.GetCurrentUser();
+            welcomeHintText.text = $"¡Hola {playerName}!";
         }
         else
         {
@@ -462,7 +476,12 @@ public class GameGenerator : MonoBehaviour
         debugInfo.AppendLine("=======================================");
 
         // Actualizamos el panel de texto con toda la información recopilada
-
+        if (!todosCorrectos && hintSystem != null && hintSystem.AreHintsEnabled())
+        {
+            // Mostrar pistas para los cubos incorrectos
+            hintSystem.ShowHintsForIncorrectCubes();
+            UpdateDebugInfo("Pistas mostradas para cubos incorrectos");
+        }
         return todosCorrectos;
     }
 
