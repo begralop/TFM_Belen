@@ -32570,10 +32570,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hintsButton: {fileID: 1856824000}
   buttonText: {fileID: 1570554205}
-  hintsOnColor: {r: 0, g: 0.2683018, b: 0.745283, a: 1}
-  hintsOffColor: {r: 0.68907976, g: 0.7655267, b: 0.8962264, a: 1}
-  debugPanel: {fileID: 0}
-  debugText: {fileID: 0}
+  debugPanel: {fileID: 1120182930}
+  debugText: {fileID: 1579453802}
   debugMode: 1
   greenMagnetMaterial: {fileID: 2100000, guid: 4c6b47a2b2f687e46ac0cceec9a7a781, type: 2}
   grayFaceMaterial: {fileID: 2100000, guid: f15684c92cbc0564c818a553811d4d3c, type: 2}
@@ -38309,10 +38307,10 @@ MonoBehaviour:
     m_SelectOnDown: {fileID: 0}
     m_SelectOnLeft: {fileID: 0}
     m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
+  m_Transition: 0
   m_Colors:
     m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.38416696, g: 0.5755897, b: 0.9150943, a: 1}
+    m_HighlightedColor: {r: 0.68956923, g: 0.7953957, b: 0.9811321, a: 1}
     m_PressedColor: {r: 0.26125845, g: 0.51873314, b: 0.9716981, a: 1}
     m_SelectedColor: {r: 0, g: 0.24964635, b: 0.6886792, a: 1}
     m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}

@@ -313,6 +313,10 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo("Panel de resultado cerrado - Bandera reseteada");
     }
 
+
+    // Modificación del método ContinueGameAfterWarning en GameGenerator.cs
+    // Reemplaza el método existente con esta versión actualizada:
+
     public void ContinueGameAfterWarning()
     {
         resultPanel.SetActive(false);
@@ -324,8 +328,33 @@ public class GameGenerator : MonoBehaviour
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
         Vector3 puzzleCenter = tableCenterObject.transform.position;
 
+        // Lista para almacenar información de cubos incorrectos
+        List<GameObject> incorrectCubes = new List<GameObject>();
+
         foreach (GameObject cube in cubes)
         {
+            // Primero verificar si el cubo está incorrecto antes de moverlo
+            string[] splitName = cube.name.Split('_');
+            if (splitName.Length >= 3)
+            {
+                int row, col;
+                if (int.TryParse(splitName[1], out row) && int.TryParse(splitName[2], out col))
+                {
+                    // Verificar si el cubo está en posición incorrecta o rotación incorrecta
+                    Vector3 targetPosition = GetMagnetPosition(row, col);
+                    float distance = Vector3.Distance(cube.transform.position, targetPosition);
+                    Quaternion targetRotation = Quaternion.identity;
+                    float angle = Quaternion.Angle(cube.transform.rotation, targetRotation);
+
+                    // Si el cubo está incorrecto, agregarlo a la lista
+                    if (distance > 0.1f || angle > 10.0f)
+                    {
+                        incorrectCubes.Add(cube);
+                    }
+                }
+            }
+
+            // Empujar el cubo hacia afuera
             Vector3 directionFromCenter = (cube.transform.position - puzzleCenter).normalized;
             directionFromCenter.y = 0;
 
@@ -334,6 +363,28 @@ public class GameGenerator : MonoBehaviour
             Vector3 displacement = directionFromCenter * outwardPush + Vector3.up * upwardPush;
 
             cube.transform.position += displacement;
+        }
+
+        // NUEVO: Mostrar pistas para los cubos incorrectos después de empujarlos
+        if (hintSystem != null && hintSystem.AreHintsEnabled())
+        {
+            // Esperar un pequeño momento para que los cubos terminen de moverse
+            // y luego mostrar las pistas
+            StartCoroutine(ShowHintsAfterPush(incorrectCubes));
+            UpdateDebugInfo($"Mostrando pistas para {incorrectCubes.Count} cubos incorrectos después del empuje");
+        }
+    }
+
+    // NUEVO: Corrutina para mostrar pistas después del empuje
+    private IEnumerator ShowHintsAfterPush(List<GameObject> incorrectCubes)
+    {
+        // Esperar un momento para que la física se estabilice después del empuje
+        yield return new WaitForSeconds(0.3f);
+
+        // Ahora mostrar las pistas para los cubos incorrectos
+        if (hintSystem != null && hintSystem.AreHintsEnabled())
+        {
+            hintSystem.ShowHintsForSpecificCubes(incorrectCubes);
         }
     }
 
