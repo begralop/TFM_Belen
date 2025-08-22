@@ -163,30 +163,22 @@ public class HintSystem : MonoBehaviour
     {
         if (hintsButton != null)
         {
-            // Obtenemos el bloque de colores actual del botón
-            ColorBlock colors = hintsButton.colors;
-
-            if (hintsEnabled)
+            Image buttonImage = hintsButton.GetComponent<Image>();
+            if (buttonImage != null)
             {
-                // Estado ACTIVO (texto "Desactivar pistas")
-                // El color normal será azul oscuro
-                colors.normalColor = HexToColor("0040B0");
-                // Opcional: puedes hacer el color seleccionado igual para que se quede marcado
-                colors.selectedColor = HexToColor("0040B0");
-            }
-            else
-            {
-                // Estado INACTIVO (texto "Activar pistas")
-                // El color normal será azul claro
-                colors.normalColor = HexToColor("85A5DB");
-                // Opcional: puedes hacer el color seleccionado igual
-                colors.selectedColor = HexToColor("85A5DB");
-            }
+                if (hintsEnabled)
+                {
+                    // Color cuando está activo (texto "Desactivar pistas")
+                    buttonImage.color = HexToColor("0040B0"); // Azul oscuro
+                }
+                else
+                {
+                    // Color cuando está inactivo (texto "Activar pistas")
+                    buttonImage.color = HexToColor("85A5DB"); // Azul claro
+                }
 
-            // Asignamos el nuevo bloque de colores al botón
-            hintsButton.colors = colors;
-
-            UpdateDebugInfo($"Color del botón actualizado: {(hintsEnabled ? "Bloque Azul oscuro" : "Bloque Azul claro")}");
+                UpdateDebugInfo($"Color del botón actualizado: {(hintsEnabled ? "Azul oscuro (0040B0)" : "Azul claro (85A5DB)")}");
+            }
         }
     }
 
