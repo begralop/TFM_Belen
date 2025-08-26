@@ -82,7 +82,7 @@ public class GameGenerator : MonoBehaviour
 
     public Button playButton;
     public TextMeshProUGUI welcomeText;
-    public TextMeshProUGUI welcomeHintText;
+    
 
     private int placedCubesCount = 0;
     private bool puzzleCompleted = false;
@@ -127,12 +127,6 @@ public class GameGenerator : MonoBehaviour
         {
             string playerName = UserManager.GetCurrentUser();
             welcomeText.text = $"Elige un puzzle, {playerName}";
-        }
-
-        if (welcomeHintText != null)
-        {
-            string playerName = UserManager.GetCurrentUser();
-            welcomeHintText.text = $"¡Hola {playerName}!";
         }
     }
 

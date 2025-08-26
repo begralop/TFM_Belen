@@ -35,7 +35,7 @@ public class HintSystem : MonoBehaviour
     private GameGenerator gameGenerator;
     private Dictionary<GameObject, Material> originalMagnetMaterials = new Dictionary<GameObject, Material>();
     private Dictionary<GameObject, Dictionary<string, Material>> originalCubeMaterials = new Dictionary<GameObject, Dictionary<string, Material>>();
-
+    public TextMeshProUGUI welcomeHintText;
     // Estado interno del sistema de pistas - STATIC para persistir entre cambios
     private static bool hintsEnabled = false;
     private StringBuilder debugInfo = new StringBuilder();
@@ -64,6 +64,11 @@ public class HintSystem : MonoBehaviour
             Debug.LogError("HintSystem: hintsButton no está asignado en el Inspector");
         }
 
+        if (welcomeHintText != null)
+        {
+            string playerName = UserManager.GetCurrentUser();
+            welcomeHintText.text = $"¡Hola {playerName}!";
+        }
         // Crear materiales por defecto si no están asignados
         CreateDefaultMaterials();
 
@@ -231,6 +236,12 @@ public class HintSystem : MonoBehaviour
     /// </summary>
     private void CreateGreenMagnetOverlay(int row, int col)
     {
+        if (gameGenerator == null || gameGenerator.magnetPrefab == null)
+        {
+            UpdateDebugInfo("ERROR: GameGenerator o magnetPrefab no están disponibles.");
+            return;
+        }
+
         Vector3 magnetPosition = GetMagnetPosition(row, col);
 
         if (magnetPosition == Vector3.zero)
@@ -239,51 +250,72 @@ public class HintSystem : MonoBehaviour
             return;
         }
 
-        // Crear un cubo que servirá como imán verde
-        currentGreenMagnet = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        currentGreenMagnet = Instantiate(gameGenerator.magnetPrefab);
         currentGreenMagnet.name = $"GreenMagnetOverlay_{row}_{col}";
+        currentGreenMagnet.transform.position = magnetPosition + Vector3.up * 0.001f;
 
-        // Posicionar ligeramente encima del imán original
-        currentGreenMagnet.transform.position = magnetPosition + Vector3.up * 0.01f;
-        currentGreenMagnet.transform.localScale = new Vector3(0.096f, 0.012f, 0.096f);
+        // <<< CAMBIO CLAVE: Hacemos el imán un 10% más grande en X y Z >>>
+        // Esto equivale a ~1cm si el cubo original mide 10cm.
+        Transform magnetTransform = currentGreenMagnet.transform;
+        float sizeIncreaseFactor = 1.1f; // 10% más grande
+        magnetTransform.localScale = new Vector3(
+            magnetTransform.localScale.x * sizeIncreaseFactor,
+            magnetTransform.localScale.y, // Mantenemos la misma altura
+            magnetTransform.localScale.z * sizeIncreaseFactor
+        );
 
-        // Desactivar el collider
         Collider greenCollider = currentGreenMagnet.GetComponent<Collider>();
         if (greenCollider != null)
         {
             greenCollider.enabled = false;
         }
 
-        // Aplicar material verde brillante
         Renderer greenRenderer = currentGreenMagnet.GetComponent<Renderer>();
         if (greenRenderer != null)
         {
-            Material greenMaterial = new Material(Shader.Find("Standard"));
-            greenMaterial.color = new Color(0f, 1f, 0f, 0.9f);
-            greenMaterial.SetFloat("_Metallic", 0.3f);
-            greenMaterial.SetFloat("_Glossiness", 0.8f);
-
-            // Agregar emisión para que brille
-            greenMaterial.EnableKeyword("_EMISSION");
-            greenMaterial.SetColor("_EmissionColor", Color.green * 0.6f);
-
-            // Configurar transparencia
-            greenMaterial.SetFloat("_Mode", 3);
-            greenMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            greenMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            greenMaterial.SetInt("_ZWrite", 0);
-            greenMaterial.DisableKeyword("_ALPHATEST_ON");
-            greenMaterial.EnableKeyword("_ALPHABLEND_ON");
-            greenMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            greenMaterial.renderQueue = 3000;
-
-            greenRenderer.material = greenMaterial;
+            greenRenderer.material = greenMagnetMaterial;
         }
 
-        // Agregar animación de pulso
         StartCoroutine(PulseGreenMagnet(currentGreenMagnet));
+        UpdateDebugInfo($"Imán verde (110% tamaño) creado en posición ({row},{col})");
+    }
 
-        UpdateDebugInfo($"Imán verde creado en posición ({row},{col})");
+    /// <summary>
+    /// Animación de pulso para el imán verde (combina brillo y una escala sutil)
+    /// </summary>
+    IEnumerator PulseGreenMagnet(GameObject magnet)
+    {
+        if (magnet == null) yield break;
+
+        Renderer magnetRenderer = magnet.GetComponent<Renderer>();
+        if (magnetRenderer == null) yield break;
+
+        // <<< CAMBIO CLAVE: Guardamos la escala base, que ya es más grande >>>
+        Vector3 baseScale = magnet.transform.localScale;
+
+        Material materialInstance = magnetRenderer.material;
+        Color baseEmissionColor = Color.green;
+        materialInstance.SetColor("_EmissionColor", baseEmissionColor * 0.5f);
+
+        float pulseTime = 0f;
+
+        while (magnet != null)
+        {
+            float emissionIntensity = 0.75f + Mathf.Sin(pulseTime * Mathf.PI * 2f) * 0.25f;
+            materialInstance.SetColor("_EmissionColor", baseEmissionColor * emissionIntensity);
+
+            // La animación de pulso ahora se aplica sobre la escala ya aumentada
+            float scaleMultiplier = 1.025f + Mathf.Sin(pulseTime * Mathf.PI * 2f) * 0.025f;
+            magnet.transform.localScale = baseScale * scaleMultiplier;
+
+            pulseTime += Time.deltaTime * 1.5f;
+            yield return null;
+        }
+
+        if (magnet != null)
+        {
+            magnet.transform.localScale = baseScale;
+        }
     }
 
     /// <summary>
@@ -341,30 +373,6 @@ public class HintSystem : MonoBehaviour
             Destroy(currentGreenMagnet);
             currentGreenMagnet = null;
             UpdateDebugInfo("Imán verde destruido");
-        }
-    }
-
-    /// <summary>
-    /// Animación de pulso para el imán verde
-    /// </summary>
-    IEnumerator PulseGreenMagnet(GameObject magnet)
-    {
-        if (magnet == null) yield break;
-
-        Vector3 originalScale = magnet.transform.localScale;
-        float pulseTime = 0f;
-
-        while (magnet != null)
-        {
-            float scale = 1f + Mathf.Sin(pulseTime * Mathf.PI * 2f) * 0.15f;
-            magnet.transform.localScale = new Vector3(
-                originalScale.x * scale,
-                originalScale.y,
-                originalScale.z * scale
-            );
-
-            pulseTime += Time.deltaTime * 2f;
-            yield return null;
         }
     }
 
