@@ -7,6 +7,7 @@ using TMPro;
 using UnityEngine.SceneManagement;
 using System.Text;
 using System.Linq;
+using Oculus.Interaction;
 
 public class GameGenerator : MonoBehaviour
 {
@@ -16,10 +17,16 @@ public class GameGenerator : MonoBehaviour
     [Tooltip("El nombre exacto de tu escena de Login (ej: 'LoginScene').")]
     public string loginSceneName;
 
-
     [Header("Sistema de Pistas")]
     [Tooltip("Referencia al sistema de pistas")]
     public HintSystem hintSystem;
+
+    [Header("Círculos de Pistas")]
+    [Tooltip("GameObject del círculo para mostrar imán verde")]
+    public GameObject magnetCircle;
+
+    [Tooltip("GameObject del círculo para mostrar caras grises")]
+    public GameObject facesCircle;
 
     [Header("Contador de Tiempo")]
     public GameObject timerPanel;
@@ -27,14 +34,12 @@ public class GameGenerator : MonoBehaviour
 
     private float elapsedTime = 0f;
     private bool isTimerRunning = false;
-    // Añade una variable para controlar si ya se guardó el tiempo
     private bool timeAlreadySaved = false;
 
     [Header("Sistema de Intentos")]
-    private int currentAttempts = 0; // Contador de intentos actual
-    private bool resultAlreadyShown = false; // Bandera para evitar mostrar resultado múltiples veces
+    private int currentAttempts = 0;
+    private bool resultAlreadyShown = false;
 
-    // --- PANEL DE DEBUG ---
     [Header("Panel de Debug")]
     [Tooltip("Panel de Canvas para mostrar información de debug")]
     public GameObject debugPanel;
@@ -43,12 +48,10 @@ public class GameGenerator : MonoBehaviour
     [Tooltip("Activar/Desactivar modo debug")]
     public bool debugMode = true;
 
-    // Variables para almacenar información de debug
     private StringBuilder debugInfo = new StringBuilder();
     private Dictionary<string, Vector3> cubePositions = new Dictionary<string, Vector3>();
     private Dictionary<string, Quaternion> cubeRotations = new Dictionary<string, Quaternion>();
 
-    // --- VARIABLES DE UI UNIFICADAS ---
     [Header("Panel de Resultado")]
     [Tooltip("El panel que aparecerá al final del puzle.")]
     public GameObject resultPanel;
@@ -62,8 +65,8 @@ public class GameGenerator : MonoBehaviour
     [Header("Sistema de Puntuaciones")]
     [Tooltip("Referencia al sistema de visualización de puntuaciones")]
     public PuzzleScoreDisplay scoreDisplay;
-    private int currentPuzzleIndex = -1; // Índice del puzzle actual
-    private List<GameObject> availablePuzzles = new List<GameObject>(); // Lista de todos los toggles de puzzles
+    private int currentPuzzleIndex = -1;
+    private List<GameObject> availablePuzzles = new List<GameObject>();
 
     [Header("Configuración del Puzle")]
     public GameObject cubePrefab;
@@ -96,16 +99,13 @@ public class GameGenerator : MonoBehaviour
     void Start()
     {
         CollectAvailablePuzzles();
-        // Asegúrate de que el panel esté desactivado al inicio
         resultPanel.SetActive(false);
 
-        // Buscar automáticamente el PuzzleScoreDisplay si no está asignado
         if (scoreDisplay == null)
         {
             scoreDisplay = FindObjectOfType<PuzzleScoreDisplay>();
         }
 
-        // Activar panel de debug si está en modo debug
         if (debugPanel != null && debugMode)
         {
             debugPanel.SetActive(true);
@@ -114,30 +114,97 @@ public class GameGenerator : MonoBehaviour
 
         ClearCurrentMagnets();
         ClearCurrentCubes();
+
         if (hintSystem == null)
         {
             hintSystem = FindObjectOfType<HintSystem>();
         }
+
+        // Configurar círculos de pistas si existen
+        SetupHintCircles();
+
         if (welcomeText != null)
         {
             string playerName = UserManager.GetCurrentUser();
             welcomeText.text = $"Elige un puzzle, {playerName}";
         }
+
         if (welcomeHintText != null)
         {
             string playerName = UserManager.GetCurrentUser();
             welcomeHintText.text = $"¡Hola {playerName}!";
         }
-        else
-        {
-            Debug.LogWarning("La referencia a 'welcomeText' no esta asignada en el Inspector.");
-        }
     }
 
-    void UpdateDebugInfo(string message)
+    void SetupHintCircles()
     {
-        debugInfo.AppendLine($"Mensaje: {message}");
-        debugText.text = debugInfo.ToString();
+        // Configurar círculo de imán verde
+        if (magnetCircle != null)
+        {
+            MagnetCircleDetector detector = magnetCircle.GetComponent<MagnetCircleDetector>();
+            if (detector == null)
+            {
+                detector = magnetCircle.AddComponent<MagnetCircleDetector>();
+            }
+            detector.SetHintSystem(hintSystem);
+
+            // IMPORTANTE: Asegurarse de que inicialmente esté oculto
+            magnetCircle.SetActive(false);
+            UpdateDebugInfo("Círculo de imán configurado y oculto inicialmente");
+        }
+
+        // Configurar círculo de caras grises
+        if (facesCircle != null)
+        {
+            FacesCircleDetector detector = facesCircle.GetComponent<FacesCircleDetector>();
+            if (detector == null)
+            {
+                detector = facesCircle.AddComponent<FacesCircleDetector>();
+            }
+            detector.SetHintSystem(hintSystem);
+
+            // IMPORTANTE: Asegurarse de que inicialmente esté oculto
+            facesCircle.SetActive(false);
+            UpdateDebugInfo("Círculo de caras configurado y oculto inicialmente");
+        }
+
+        // Actualizar visibilidad basada en el estado actual de las pistas
+        UpdateCirclesVisibility();
+    }
+
+    public void UpdateCirclesVisibility()
+    {
+        bool hintsEnabled = hintSystem != null && hintSystem.AreHintsEnabled();
+
+        if (magnetCircle != null)
+            magnetCircle.SetActive(hintsEnabled);
+
+        if (facesCircle != null)
+            facesCircle.SetActive(hintsEnabled);
+
+        UpdateDebugInfo($"Círculos actualizados - Pistas {(hintsEnabled ? "ACTIVADAS" : "DESACTIVADAS")}");
+    }
+
+    public void UpdateDebugInfo(string message)
+    {
+        debugInfo.AppendLine($"{message}");
+
+        if (debugText != null)
+        {
+            debugText.text = debugInfo.ToString();
+
+            string[] lines = debugInfo.ToString().Split('\n');
+            if (lines.Length > 50)
+            {
+                debugInfo.Clear();
+                for (int i = lines.Length - 50; i < lines.Length; i++)
+                {
+                    if (i >= 0 && !string.IsNullOrEmpty(lines[i]))
+                        debugInfo.AppendLine(lines[i]);
+                }
+                debugText.text = debugInfo.ToString();
+            }
+        }
     }
 
     void StartTimer()
@@ -158,6 +225,9 @@ public class GameGenerator : MonoBehaviour
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
             timerText.text = $"{minutes:00}:{seconds:00}";
         }
+
+        // NO actualizar círculos constantemente en Update
+        // Solo cuando sea necesario (al cambiar estado de pistas)
     }
 
     public void Logout()
@@ -167,29 +237,24 @@ public class GameGenerator : MonoBehaviour
 
         if (string.IsNullOrEmpty(loginSceneName))
         {
-            Debug.LogError("El nombre de la escena de login (loginSceneName) no esta especificado en el Inspector.");
+            Debug.LogError("El nombre de la escena de login no esta especificado.");
             return;
         }
 
         SceneManager.LoadScene(loginSceneName);
     }
 
-    // Modifica el método ShowResult para evitar llamadas múltiples:
     private void ShowResult(bool isSuccess)
     {
-        // EVITAR MOSTRAR RESULTADO MÚLTIPLES VECES
         if (resultAlreadyShown)
         {
             UpdateDebugInfo("ShowResult ya fue llamado, evitando duplicado");
             return;
         }
 
-        resultAlreadyShown = true; // Marcar que ya se mostró el resultado
-
-        // INCREMENTAR EL CONTADOR DE INTENTOS SIEMPRE (tanto si falla como si tiene éxito)
-        // Esto se hace AQUÍ para asegurar que solo se cuenta una vez por verificación
+        resultAlreadyShown = true;
         currentAttempts++;
-        UpdateDebugInfo($"RESULTADO: Este es el intento número {currentAttempts} - {(isSuccess ? "ÉXITO" : "FALLO")}");
+        UpdateDebugInfo($"RESULTADO: Intento {currentAttempts} - {(isSuccess ? "ÉXITO" : "FALLO")}");
 
         resultPanel.SetActive(true);
 
@@ -199,72 +264,46 @@ public class GameGenerator : MonoBehaviour
 
         if (isSuccess)
         {
-            // Detener el timer y guardar la puntuación
             isTimerRunning = false;
 
-            // IMPORTANTE: Solo guardar si no se ha guardado ya
             if (!timeAlreadySaved)
             {
-                // Obtener el ID del puzzle actual
                 string puzzleId = GetCurrentPuzzleId();
-
-                // Guardar el tiempo para el usuario actual CON LOS INTENTOS
                 string currentUser = UserManager.GetCurrentUser();
+
                 if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
                 {
-                    // CALCULAR EL NÚMERO TOTAL DE CUBOS DEL PUZZLE
                     int totalCubes = rows * columns;
-
                     UserManager.AddScore(currentUser, puzzleId, elapsedTime, currentAttempts, totalCubes);
-                    Debug.Log($"Tiempo guardado: Usuario={currentUser}, Puzzle={puzzleId}, Tiempo={elapsedTime:F2}s, Intentos={currentAttempts}, Cubos={totalCubes}");
-                    timeAlreadySaved = true; // Marcar que ya se guardó
+                    Debug.Log($"Puntuación guardada");
+                    timeAlreadySaved = true;
 
-                    // ACTUALIZAR EL PANEL DE PUNTUACIONES después de guardar
                     if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
                     {
-                        // Esperar un frame para asegurar que los datos se hayan guardado correctamente
                         StartCoroutine(RefreshScoreDisplayAfterDelay());
                     }
                 }
             }
-            else
-            {
-                Debug.Log("El tiempo ya fue guardado anteriormente, evitando duplicado");
-            }
 
-            // Mostrar el mensaje de éxito con el tiempo Y LOS INTENTOS
             int minutes = Mathf.FloorToInt(elapsedTime / 60f);
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
-
-            // MODIFICADO: Cambiar el texto del botón y su función según si hay más puzzles
             bool hasNextPuzzle = (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1);
-
             string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
 
             if (hasNextPuzzle)
             {
                 resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00} con {attemptText}.\n¿Quieres continuar con el siguiente puzzle?";
-
-                // Cambiar el texto del botón
                 var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
                 if (continueButtonText != null)
-                {
                     continueButtonText.text = "Siguiente";
-                }
-
                 continueButton.onClick.AddListener(LoadNextPuzzle);
             }
             else
             {
                 resultMessageText.text = $"¡Felicidades! Has completado el puzle en {minutes:00}:{seconds:00} con {attemptText}.\n¡Has completado todos los puzzles disponibles!";
-
-                // Cambiar el texto del botón
                 var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
                 if (continueButtonText != null)
-                {
                     continueButtonText.text = "Cerrar";
-                }
-
                 continueButton.onClick.AddListener(CloseResultPanel);
             }
         }
@@ -272,19 +311,13 @@ public class GameGenerator : MonoBehaviour
         {
             string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
             resultMessageText.text = $"No has completado el puzle correctamente. Llevas {attemptText}. ¿Quieres seguir intentándolo?";
-
-            // Asegurarse de que el texto del botón sea "Reintentar"
             var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
             if (continueButtonText != null)
-            {
                 continueButtonText.text = "Reintentar";
-            }
-
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
     }
 
-    // NUEVO: Método auxiliar para obtener el ID del puzzle actual
     private string GetCurrentPuzzleId()
     {
         if (selectedImage != null && selectedImage.sprite != null)
@@ -292,7 +325,6 @@ public class GameGenerator : MonoBehaviour
             return selectedImage.sprite.name;
         }
 
-        // Si no hay imagen seleccionada, intentar obtenerla del curvedBackground
         GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
         if (curvedBackground != null)
         {
@@ -309,52 +341,23 @@ public class GameGenerator : MonoBehaviour
     public void CloseResultPanel()
     {
         resultPanel.SetActive(false);
-        resultAlreadyShown = false; // Resetear la bandera cuando se cierra el panel
-        UpdateDebugInfo("Panel de resultado cerrado - Bandera reseteada");
+        resultAlreadyShown = false;
+        UpdateDebugInfo("Panel de resultado cerrado");
     }
-
-
-    // Modificación del método ContinueGameAfterWarning en GameGenerator.cs
-    // Reemplaza el método existente con esta versión actualizada:
 
     public void ContinueGameAfterWarning()
     {
         resultPanel.SetActive(false);
-        resultAlreadyShown = false; // Resetear la bandera para permitir nueva verificación
+        resultAlreadyShown = false;
         isTimerRunning = true;
 
-        UpdateDebugInfo("Continuando juego - Empujando piezas - Bandera reseteada");
+        UpdateDebugInfo("Continuando juego - Empujando piezas");
 
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
         Vector3 puzzleCenter = tableCenterObject.transform.position;
 
-        // Lista para almacenar información de cubos incorrectos
-        List<GameObject> incorrectCubes = new List<GameObject>();
-
         foreach (GameObject cube in cubes)
         {
-            // Primero verificar si el cubo está incorrecto antes de moverlo
-            string[] splitName = cube.name.Split('_');
-            if (splitName.Length >= 3)
-            {
-                int row, col;
-                if (int.TryParse(splitName[1], out row) && int.TryParse(splitName[2], out col))
-                {
-                    // Verificar si el cubo está en posición incorrecta o rotación incorrecta
-                    Vector3 targetPosition = GetMagnetPosition(row, col);
-                    float distance = Vector3.Distance(cube.transform.position, targetPosition);
-                    Quaternion targetRotation = Quaternion.identity;
-                    float angle = Quaternion.Angle(cube.transform.rotation, targetRotation);
-
-                    // Si el cubo está incorrecto, agregarlo a la lista
-                    if (distance > 0.1f || angle > 10.0f)
-                    {
-                        incorrectCubes.Add(cube);
-                    }
-                }
-            }
-
-            // Empujar el cubo hacia afuera
             Vector3 directionFromCenter = (cube.transform.position - puzzleCenter).normalized;
             directionFromCenter.y = 0;
 
@@ -364,60 +367,47 @@ public class GameGenerator : MonoBehaviour
 
             cube.transform.position += displacement;
         }
-
-        // NUEVO: Mostrar pistas para los cubos incorrectos después de empujarlos
-        if (hintSystem != null && hintSystem.AreHintsEnabled())
-        {
-            // Esperar un pequeño momento para que los cubos terminen de moverse
-            // y luego mostrar las pistas
-            StartCoroutine(ShowHintsAfterPush(incorrectCubes));
-            UpdateDebugInfo($"Mostrando pistas para {incorrectCubes.Count} cubos incorrectos después del empuje");
-        }
-    }
-
-    // NUEVO: Corrutina para mostrar pistas después del empuje
-    private IEnumerator ShowHintsAfterPush(List<GameObject> incorrectCubes)
-    {
-        // Esperar un momento para que la física se estabilice después del empuje
-        yield return new WaitForSeconds(0.3f);
-
-        // Ahora mostrar las pistas para los cubos incorrectos
-        if (hintSystem != null && hintSystem.AreHintsEnabled())
-        {
-            hintSystem.ShowHintsForSpecificCubes(incorrectCubes);
-        }
     }
 
     public void RestartGame()
     {
         resultPanel.SetActive(false);
-        resultAlreadyShown = false; // Resetear la bandera
+        resultAlreadyShown = false;
         placedCubesCount = 0;
         elapsedTime = 0f;
         timerText.text = "00:00";
         isTimerRunning = true;
         puzzleCompleted = false;
         timeAlreadySaved = false;
-
-        // REINICIAR EL CONTADOR DE INTENTOS
         currentAttempts = 0;
+
+        // IMPORTANTE: Limpiar efectos de pistas antes de regenerar
+        if (hintSystem != null)
+        {
+            hintSystem.OnPuzzleChanged();
+        }
 
         ClearCurrentMagnets();
         ClearCurrentCubes();
+
+        // Asegurarse de que tenemos materiales de otros puzzles antes de generar
+        if (otherPuzzleMaterials.Count == 0)
+        {
+            GenerateMaterialsFromPanelImages();
+            UpdateDebugInfo($"Materiales de otros puzzles generados: {otherPuzzleMaterials.Count}");
+        }
+
         GenerateGame();
 
-        // MANTENER EL PANEL DE PUNTUACIONES VISIBLE si ya estaba mostrado
         if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
         {
-            // Verificar si el panel de puntuaciones está activo
             if (scoreDisplay.scorePanel != null && scoreDisplay.scorePanel.activeSelf)
             {
-                // Refrescar las puntuaciones para mostrar el nuevo resultado guardado
                 StartCoroutine(RefreshScoreDisplayAfterRestart());
             }
         }
 
-        UpdateDebugInfo("Juego reiniciado - Intentos reiniciados a 0 - Bandera reseteada");
+        UpdateDebugInfo("Juego reiniciado");
     }
 
     public void OnCubePlaced()
@@ -440,8 +430,7 @@ public class GameGenerator : MonoBehaviour
 
     public void CheckPuzzleCompletion()
     {
-        UpdateDebugInfo("INICIANDO VERIFICACIÓN COMPLETA DEL PUZZLE");
-
+        UpdateDebugInfo("INICIANDO VERIFICACIÓN DEL PUZZLE");
         isTimerRunning = false;
         bool puzzleEsCorrecto = IsPuzzleComplete();
         ShowResult(puzzleEsCorrecto);
@@ -449,18 +438,16 @@ public class GameGenerator : MonoBehaviour
 
     private bool IsPuzzleComplete()
     {
-        // Limpiamos el panel de debug para empezar un nuevo informe
         debugInfo.Clear();
-
         debugInfo.AppendLine("=======================================");
-        debugInfo.AppendLine("INICIANDO VERIFICACIÓN (LÓGICA SIMPLE)");
+        debugInfo.AppendLine("VERIFICANDO PUZZLE");
         debugInfo.AppendLine("=======================================");
 
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
 
         if (cubes.Length == 0)
         {
-            debugInfo.AppendLine("ADVERTENCIA: No se encontraron cubos.");
+            debugInfo.AppendLine("No se encontraron cubos.");
             return false;
         }
 
@@ -473,66 +460,32 @@ public class GameGenerator : MonoBehaviour
 
             if (splitName.Length < 3 || !int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
             {
-                debugInfo.AppendLine($"ERROR: Nombre de cubo inválido: {cube.name}");
+                debugInfo.AppendLine($"ERROR: Nombre inválido: {cube.name}");
                 todosCorrectos = false;
-                continue; // Pasamos al siguiente cubo en lugar de salir
+                continue;
             }
 
-            debugInfo.AppendLine($"\n--- Verificando Cubo: {cube.name} ---");
-
-            // --- CÁLCULOS ---
             Vector3 targetPosition = GetMagnetPosition(row, col);
             float distancia = Vector3.Distance(cube.transform.position, targetPosition);
-
             Quaternion targetRotation = Quaternion.identity;
             float angulo = Quaternion.Angle(cube.transform.rotation, targetRotation);
 
-            // --- INFORMACIÓN DETALLADA ---
-            debugInfo.AppendLine($"Distancia: {distancia:F3} (Req: <= 0.05)");
-            debugInfo.AppendLine($"Ángulo: {angulo:F1} (Req: <= 5.0)");
+            debugInfo.AppendLine($"Cubo {cube.name}: Dist={distancia:F3} Ang={angulo:F1}");
 
-            // --- VERIFICACIÓN ---
             if (distancia <= 0.1f && angulo <= 10.0f)
             {
-                debugInfo.AppendLine($"===> RESULTADO: CORRECTO");
-                // --- CORRECCIÓN APLICADA AQUÍ ---
-
-                // 1. MODIFICAMOS LA ALTURA DEL OBJETIVO
-                // Esto pondrá la pieza al doble de la altura del imán respecto al origen del mundo (Y=0).
-                targetPosition.y = targetPosition.y * 2;
-
-                // 2. DESCOMENTAMOS LA LÍNEA PARA APLICAR LA POSICIÓN FINAL
-                // Esta es la línea clave que faltaba. Ahora el cubo se ajustará a su sitio.
-                // cube.transform.position = targetPosition;
-
-                // La rotación ya estaba correcta.
+                debugInfo.AppendLine($"  -> CORRECTO");
                 cube.transform.rotation = targetRotation;
             }
             else
             {
-                debugInfo.AppendLine($"===> RESULTADO: INCORRECTO");
-                todosCorrectos = false; // Marcamos que al menos uno ha fallado
+                debugInfo.AppendLine($"  -> INCORRECTO");
+                todosCorrectos = false;
             }
         }
 
-        debugInfo.AppendLine("\n=======================================");
-        if (todosCorrectos)
-        {
-            debugInfo.AppendLine("¡ÉXITO! Todas las piezas están correctas.");
-        }
-        else
-        {
-            debugInfo.AppendLine("FALLO: Al menos una pieza es incorrecta.");
-        }
         debugInfo.AppendLine("=======================================");
-
-        // Actualizamos el panel de texto con toda la información recopilada
-        if (!todosCorrectos && hintSystem != null && hintSystem.AreHintsEnabled())
-        {
-            // Mostrar pistas para los cubos incorrectos
-            hintSystem.ShowHintsForIncorrectCubes();
-            UpdateDebugInfo("Pistas mostradas para cubos incorrectos");
-        }
+        debugInfo.AppendLine(todosCorrectos ? "ÉXITO" : "FALLO");
         return todosCorrectos;
     }
 
@@ -543,50 +496,24 @@ public class GameGenerator : MonoBehaviour
 
     private IEnumerator CheckPuzzleAfterDelay()
     {
-        UpdateDebugInfo("Esperando 0.2s para que la física se estabilice...");
+        UpdateDebugInfo("Esperando estabilización...");
         yield return new WaitForSeconds(0.2f);
         CheckPuzzleCompletion();
-    }
-
-    void PositionPanel(GameObject panel)
-    {
-        if (tableCenterObject == null)
-        {
-            Debug.LogError("No se ha asignado un objeto de referencia para el centro de la mesa.");
-            return;
-        }
-
-        Vector3 tableCenter = tableCenterObject.transform.position;
-        float puzzleWidth = gridCreator.columns * cubeSize;
-        float puzzleHeight = gridCreator.rows * cubeSize;
-
-        Vector3 puzzleCenter = new Vector3(
-            tableCenter.x,
-            tableCenter.y + magnetHeightOffset,
-            tableCenter.z
-        );
-
-        float panelHeightOffset = 0.2f;
-        Vector3 panelPosition = new Vector3(
-            puzzleCenter.x,
-            puzzleCenter.y + panelHeightOffset,
-            puzzleCenter.z
-        );
-
-        panel.transform.position = panelPosition;
-        panel.transform.LookAt(Camera.main.transform);
-        panel.transform.rotation = Quaternion.Euler(0, panel.transform.rotation.eulerAngles.y, 0);
-        panel.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
     }
 
     void GenerateGame()
     {
         placedCubesCount = 0;
-        // REINICIAR INTENTOS CADA VEZ QUE SE GENERA UN JUEGO (al presionar Play)
-        // IMPORTANTE: Debe empezar desde 0, no desde 1
         currentAttempts = 0;
-        resultAlreadyShown = false; // Resetear la bandera también
-        UpdateDebugInfo($"Generando nuevo juego - Intentos inicializados a {currentAttempts}...");
+        resultAlreadyShown = false;
+
+        // IMPORTANTE: Limpiar cualquier efecto de pistas antes de generar
+        if (hintSystem != null)
+        {
+            hintSystem.OnPuzzleChanged();
+        }
+
+        UpdateDebugInfo($"Generando juego...");
 
         var grid = GameObject.FindGameObjectWithTag("Grid");
         var curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
@@ -618,18 +545,28 @@ public class GameGenerator : MonoBehaviour
                         Quaternion cubeRotation = Quaternion.Euler(Random.Range(0f, 90f), Random.Range(0f, 90f), Random.Range(0f, 90f));
                         GameObject cube = Instantiate(cubePrefab, cubePosition, cubeRotation);
                         cube.tag = "cube";
-                        Renderer[] cubeRenderers = cube.GetComponentsInChildren<Renderer>();
 
+                        Renderer[] cubeRenderers = cube.GetComponentsInChildren<Renderer>();
                         if (cubeRenderers != null && cubeRenderers.Length > 0)
                         {
+                            // Verificar que tenemos materiales de otros puzzles
+                            if (otherPuzzleMaterials == null || otherPuzzleMaterials.Count == 0)
+                            {
+                                UpdateDebugInfo("ERROR CRÍTICO: No hay materiales de otros puzzles!");
+                                UpdateDebugInfo("Intentando regenerar materiales...");
+                                GenerateMaterialsFromPanelImages();
+                            }
+
                             foreach (Renderer renderer in cubeRenderers)
                             {
                                 if (renderer.name == "Face1")
                                 {
+                                    // Face1 tiene el fragmento correcto del puzzle
                                     renderer.material = materials[r * gridCreator.columns + c];
                                 }
                                 else
                                 {
+                                    // Las otras caras deben tener materiales aleatorios de otros puzzles
                                     if (otherPuzzleMaterials != null && otherPuzzleMaterials.Count > 0)
                                     {
                                         int randomIndex = Random.Range(0, otherPuzzleMaterials.Count);
@@ -637,21 +574,36 @@ public class GameGenerator : MonoBehaviour
                                     }
                                     else
                                     {
-                                        GenerateMaterialsFromPanelImages();
-                                        int randomIndex = Random.Range(0, otherPuzzleMaterials.Count);
-                                        renderer.material = otherPuzzleMaterials[randomIndex];
+                                        // Si aún no hay materiales, usar el material del propio puzzle como fallback
+                                        UpdateDebugInfo($"FALLBACK: Usando material del puzzle actual para {renderer.name}");
+                                        int randomPieceIndex = Random.Range(0, materials.Length);
+                                        renderer.material = materials[randomPieceIndex];
                                     }
                                 }
                             }
+
                             cube.name = $"Cube_{r}_{c}";
-                            var interactable = cube.AddComponent<XRGrabInteractable>();
-                            cube.AddComponent<CubeInteraction>();
+
+                            var rb = cube.GetComponent<Rigidbody>();
+                            if (rb == null)
+                            {
+                                rb = cube.AddComponent<Rigidbody>();
+                                rb.useGravity = true;
+                                rb.isKinematic = false;
+                            }
+
+                            var grabbable = cube.AddComponent<Grabbable>();
+                            var physicsGrabbable = cube.AddComponent<PhysicsGrabbable>();
+                            physicsGrabbable.InjectAllPhysicsGrabbable(grabbable, rb);
+
+                            var cubeInteraction = cube.AddComponent<CubeInteraction>();
                         }
                         else
                         {
-                            Debug.LogWarning("El objeto clonado no tiene componentes Renderer en las caras del cubo.");
+                            Debug.LogWarning("El cubo no tiene renderers");
                             Destroy(cube);
                         }
+
                         var magnet = Instantiate(magnetPrefab, magnetPositions[magnetIndex], Quaternion.identity);
                         magnet.tag = "refCube";
                         magnetIndex++;
@@ -659,16 +611,8 @@ public class GameGenerator : MonoBehaviour
                     }
                 }
 
-                UpdateDebugInfo($"Juego generado: {rows}x{columns} = {rows * columns} cubos");
+                UpdateDebugInfo($"Juego generado: {rows}x{columns}");
             }
-            else
-            {
-                Debug.LogError("No se pudieron generar los materiales");
-            }
-        }
-        else
-        {
-            Debug.LogError("No se encontraron los objetos con los tags 'Grid' o 'curvedBackground'.");
         }
     }
 
@@ -713,7 +657,7 @@ public class GameGenerator : MonoBehaviour
 
         if (tableCenterObject == null)
         {
-            Debug.LogError("No se ha asignado un objeto de referencia para el centro de la mesa.");
+            Debug.LogError("No se encontró el centro de la mesa.");
             return;
         }
 
@@ -732,20 +676,17 @@ public class GameGenerator : MonoBehaviour
                     tableCenter.z - puzzleHeight / 2 + r * cubeSize * 0.8f
                 );
                 magnetPositions.Add(magnetPosition);
+
                 if (magnetPrefab != null)
                 {
                     GameObject newMagnet = Instantiate(magnetPrefab, magnetPosition, Quaternion.identity);
                     newMagnet.tag = "refCube";
                     newMagnet.transform.localScale = new Vector3(newMagnet.transform.localScale.x, 0.01f, newMagnet.transform.localScale.z);
                 }
-                else
-                {
-                    Debug.LogError("No se pudo cargar el prefab de imán.");
-                }
             }
         }
 
-        UpdateDebugInfo($"Se generaron {magnetPositions.Count} posiciones de imanes");
+        UpdateDebugInfo($"Generados {magnetPositions.Count} imanes");
     }
 
     void ClearCurrentMagnets()
@@ -766,18 +707,7 @@ public class GameGenerator : MonoBehaviour
         }
     }
 
-    List<Vector3> GetCurrentMagnetPositions()
-    {
-        List<Vector3> positions = new List<Vector3>();
-        GameObject[] magnets = GameObject.FindGameObjectsWithTag("refCube");
-        foreach (GameObject magnet in magnets)
-        {
-            positions.Add(magnet.transform.position);
-        }
-        return positions;
-    }
-
-    Vector3 GetMagnetPosition(int row, int col)
+    public Vector3 GetMagnetPosition(int row, int col)
     {
         if (row * gridCreator.columns + col < magnetPositions.Count)
         {
@@ -785,28 +715,31 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            Debug.LogError("La posición del imán está fuera de los límites.");
+            Debug.LogError("Posición de imán fuera de límites.");
             return Vector3.zero;
         }
     }
 
-    // Modifica el método OnImageSelected para resetear todos los contadores cuando se selecciona un nuevo puzzle:
     public void OnImageSelected(Image image)
     {
-        // OCULTAR EL PANEL DE RESULTADO AL SELECCIONAR CUALQUIER PUZZLE
         if (resultPanel != null && resultPanel.activeSelf)
         {
             resultPanel.SetActive(false);
         }
 
-        // REINICIAR TODOS LOS CONTADORES AL SELECCIONAR UN NUEVO PUZZLE
+        // Limpiar cualquier efecto de pistas antes de generar el nuevo puzzle
+        if (hintSystem != null)
+        {
+            hintSystem.OnPuzzleChanged();
+        }
+
         elapsedTime = 0f;
         isTimerRunning = false;
         timeAlreadySaved = false;
-        currentAttempts = 0; // Esto es crítico - siempre a 0 al cambiar puzzle
+        currentAttempts = 0;
         placedCubesCount = 0;
         puzzleCompleted = false;
-        resultAlreadyShown = false; // Resetear la bandera también
+        resultAlreadyShown = false;
 
         if (timerText != null)
         {
@@ -814,42 +747,49 @@ public class GameGenerator : MonoBehaviour
         }
 
         selectedImage = image;
+
+        // IMPORTANTE: Primero obtener los valores de rows y columns
+        var grid = GameObject.FindGameObjectWithTag("Grid");
+        if (grid != null)
+        {
+            gridCreator = grid.GetComponent<GridCreator>();
+            if (gridCreator != null)
+            {
+                rows = gridCreator.rows;
+                columns = gridCreator.columns;
+                UpdateDebugInfo($"Grid encontrado: {rows}x{columns}");
+            }
+        }
+
+        // DESPUÉS generar los materiales con los valores correctos
         otherPuzzleMaterials.Clear();
         GenerateMaterialsFromPanelImages();
 
-        // Actualizar el índice del puzzle actual
         UpdateCurrentPuzzleIndex();
+        UpdateDebugInfo($"Puzzle seleccionado: {image.sprite.name}");
+        UpdateDebugInfo($"Materiales de otros puzzles disponibles: {otherPuzzleMaterials.Count}");
 
-        UpdateDebugInfo($"Nuevo puzzle seleccionado: {image.sprite.name} (Índice: {currentPuzzleIndex}) - Panel cerrado y contadores reiniciados - Intentos: {currentAttempts}");
+        // Actualizar visibilidad de los círculos después de seleccionar puzzle
+        UpdateCirclesVisibility();
     }
 
     private void LoadNextPuzzle()
     {
         if (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1)
         {
-            // Cerrar el panel de resultado
             resultPanel.SetActive(false);
-
-            // Resetear la bandera para el siguiente puzzle
             timeAlreadySaved = false;
-            currentAttempts = 0; // REINICIAR INTENTOS PARA EL SIGUIENTE PUZZLE
+            currentAttempts = 0;
 
-            // Limpiar el puzzle actual
             ClearCurrentMagnets();
             ClearCurrentCubes();
 
-            // Incrementar al siguiente puzzle
             currentPuzzleIndex++;
-
-            // Activar el siguiente puzzle
             GameObject nextPuzzle = availablePuzzles[currentPuzzleIndex];
-
-            UpdateDebugInfo($"Intentando cargar puzzle: {nextPuzzle.name} (índice {currentPuzzleIndex}) - Intentos reiniciados");
 
             var toggle = nextPuzzle.GetComponent<UnityEngine.UI.Toggle>();
             if (toggle != null)
             {
-                // Desactivar todos los otros toggles primero
                 foreach (var puzzle in availablePuzzles)
                 {
                     var t = puzzle.GetComponent<UnityEngine.UI.Toggle>();
@@ -859,187 +799,115 @@ public class GameGenerator : MonoBehaviour
                     }
                 }
 
-                // Activar el siguiente toggle
                 toggle.isOn = true;
-
-                // IMPORTANTE: Forzar la actualización del puzzle
-                // Esperar un frame y luego generar el juego
                 StartCoroutine(GenerateNextPuzzleAfterDelay());
-            }
-            else
-            {
-                Debug.LogError($"No se encontró Toggle en {nextPuzzle.name}");
             }
         }
         else
         {
-            // No hay más puzzles, solo cerrar el panel
             CloseResultPanel();
-            UpdateDebugInfo("No hay más puzzles disponibles");
         }
     }
 
-    // NUEVO: Corrutina para refrescar el panel después de reiniciar
     private IEnumerator RefreshScoreDisplayAfterRestart()
     {
-        // Esperar un poco más para que el juego se haya reiniciado completamente
         yield return new WaitForSeconds(0.1f);
-
         if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
         {
             scoreDisplay.RefreshScores();
-            UpdateDebugInfo("Panel de puntuaciones refrescado después de reiniciar");
         }
     }
 
-    // NUEVO: Corrutina para refrescar el panel de puntuaciones después de un pequeño retraso
     private IEnumerator RefreshScoreDisplayAfterDelay()
     {
-        // Esperar un frame para que se complete el guardado
         yield return null;
-
         if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
         {
             scoreDisplay.ShowScoresForPuzzle(selectedImage.sprite);
-            UpdateDebugInfo("Panel de puntuaciones actualizado con nuevo resultado");
         }
     }
 
-    // NUEVO: Corrutina para generar el puzzle después de un pequeño retraso
     private IEnumerator GenerateNextPuzzleAfterDelay()
     {
-        // Esperar un frame para que el toggle se active completamente
         yield return null;
-
-        // Verificar que se haya seleccionado correctamente la imagen
         GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
         if (curvedBackground != null)
         {
             Image bgImage = curvedBackground.GetComponent<Image>();
             if (bgImage != null && bgImage.sprite != null)
             {
-                UpdateDebugInfo($"Imagen del siguiente puzzle cargada: {bgImage.sprite.name}");
-
-                // Si el playButton existe y necesita ser presionado
                 if (playButton != null)
                 {
-                    // Simular el click del botón play
                     playButton.onClick.Invoke();
                 }
                 else
                 {
-                    // Si no hay playButton, generar directamente
                     GenerateGame();
                 }
             }
-            else
-            {
-                Debug.LogError("No se pudo obtener el sprite del curvedBackground");
-                UpdateDebugInfo("ERROR: No se pudo cargar la imagen del puzzle");
-            }
-        }
-        else
-        {
-            Debug.LogError("No se encontró el curvedBackground");
         }
     }
 
-    // También mejora el método CollectAvailablePuzzles para ser más robusto:
     private void CollectAvailablePuzzles()
     {
-        // Limpiar la lista anterior
         availablePuzzles.Clear();
-
-        // Método 1: Buscar por ImagePanelController
         ImagePanelController[] controllers = FindObjectsOfType<ImagePanelController>();
 
         foreach (var controller in controllers)
         {
-            // Verificar que el GameObject tenga un Toggle
             if (controller.gameObject.GetComponent<Toggle>() != null)
             {
                 availablePuzzles.Add(controller.gameObject);
             }
         }
 
-        // Si no encontró ninguno, intentar buscar directamente los Toggles con el patrón de nombre
-        if (availablePuzzles.Count == 0)
-        {
-            Debug.LogWarning("No se encontraron puzzles por ImagePanelController, buscando por nombre...");
-
-            // Buscar todos los GameObjects que contengan "RoundedBoxToggle" en el nombre
-            GameObject[] allObjects = FindObjectsOfType<GameObject>();
-            foreach (var obj in allObjects)
-            {
-                if (obj.name.Contains("RoundedBoxToggle") && obj.GetComponent<Toggle>() != null)
-                {
-                    availablePuzzles.Add(obj);
-                }
-            }
-        }
-
-        // Ordenar por nombre para mantener un orden consistente
         availablePuzzles.Sort((a, b) => a.name.CompareTo(b.name));
-
-        Debug.Log($"Se encontraron {availablePuzzles.Count} puzzles disponibles:");
-        for (int i = 0; i < availablePuzzles.Count; i++)
-        {
-            Debug.Log($"  {i}: {availablePuzzles[i].name}");
-        }
-
-        if (availablePuzzles.Count == 0)
-        {
-            Debug.LogError("¡ADVERTENCIA! No se encontraron puzzles disponibles en la escena");
-        }
+        Debug.Log($"Se encontraron {availablePuzzles.Count} puzzles");
     }
 
-    // NUEVO: Método para actualizar el índice del puzzle actual
     private void UpdateCurrentPuzzleIndex()
     {
-        // Buscar cuál toggle está activo
         for (int i = 0; i < availablePuzzles.Count; i++)
         {
             var toggle = availablePuzzles[i].GetComponent<UnityEngine.UI.Toggle>();
             if (toggle != null && toggle.isOn)
             {
                 currentPuzzleIndex = i;
-                Debug.Log($"Puzzle actual índice: {currentPuzzleIndex} de {availablePuzzles.Count}");
                 return;
             }
         }
-
         currentPuzzleIndex = -1;
-    }
-
-    // OPCIONAL: Método para saltar a un puzzle específico (útil para debugging)
-    public void JumpToPuzzle(int index)
-    {
-        if (index >= 0 && index < availablePuzzles.Count)
-        {
-            currentPuzzleIndex = index;
-            GameObject targetPuzzle = availablePuzzles[index];
-            var toggle = targetPuzzle.GetComponent<UnityEngine.UI.Toggle>();
-
-            if (toggle != null)
-            {
-                // Desactivar todos los otros toggles
-                foreach (var puzzle in availablePuzzles)
-                {
-                    var t = puzzle.GetComponent<UnityEngine.UI.Toggle>();
-                    if (t != null && t != toggle)
-                    {
-                        t.isOn = false;
-                    }
-                }
-
-                // Activar el toggle objetivo
-                toggle.isOn = true;
-            }
-        }
     }
 
     void GenerateMaterialsFromPanelImages()
     {
+        // IMPORTANTE: Obtener rows y columns del GridCreator si aún no están establecidos
+        if (rows == 0 || columns == 0)
+        {
+            var grid = GameObject.FindGameObjectWithTag("Grid");
+            if (grid != null)
+            {
+                gridCreator = grid.GetComponent<GridCreator>();
+                if (gridCreator != null)
+                {
+                    rows = gridCreator.rows;
+                    columns = gridCreator.columns;
+                    UpdateDebugInfo($"Rows y columns obtenidos del GridCreator: {rows}x{columns}");
+                }
+            }
+        }
+
+        // Si aún no tenemos valores válidos, usar valores por defecto
+        if (rows == 0 || columns == 0)
+        {
+            rows = 3;  // Valor por defecto
+            columns = 3;  // Valor por defecto
+            UpdateDebugInfo($"ADVERTENCIA: Usando valores por defecto: {rows}x{columns}");
+        }
+
+        // Limpiar lista anterior
+        otherPuzzleMaterials.Clear();
+
         foreach (Transform child in imagesPanel)
         {
             Transform contentTransform = child.Find("Content");
@@ -1054,12 +922,11 @@ public class GameGenerator : MonoBehaviour
                         Texture2D texture = SpriteToTexture2D(img.sprite);
                         Material[] materials = DivideImageIntoMaterials(texture, rows, columns);
                         otherPuzzleMaterials.AddRange(materials);
-                        Debug.Log("Imagen añadida a otherPuzzleMaterials: " + img.sprite.name);
                     }
                 }
             }
         }
 
-        UpdateDebugInfo($"Total de materiales generados: {otherPuzzleMaterials.Count}");
+        UpdateDebugInfo($"Total materiales de otros puzzles generados: {otherPuzzleMaterials.Count}");
     }
 }

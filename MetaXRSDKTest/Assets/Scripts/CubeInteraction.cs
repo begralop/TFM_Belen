@@ -1,169 +1,173 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.XR.Interaction.Toolkit;
-using System.Text;
+using Oculus.Interaction;
 
 public class CubeInteraction : MonoBehaviour
 {
     private GameGenerator gameGenerator;
-    private HintSystem hintSystem; // Referencia al sistema de pistas
-    private bool isPlaced = false; // Variable para asegurarse de que solo se cuente una vez
-    private XRGrabInteractable grabInteractable; // Referencia al componente de agarre
+    private HintSystem hintSystem;
+    private bool isPlaced = false;
 
-    // NUEVO: StringBuilder para debug
-    private StringBuilder debugInfo = new StringBuilder();
+    // NUEVO: Usar PhysicsGrabbable en lugar de XRGrabInteractable
+    private PhysicsGrabbable physicsGrabbable;
+    private IPointable pointable;
+    private bool isGrabbed = false;
+
+    void Awake()
+    {
+        gameGenerator = FindObjectOfType<GameGenerator>();
+        hintSystem = FindObjectOfType<HintSystem>();
+    }
+
+    public bool IsGrabbed()
+    {
+        return isGrabbed;
+    }
 
     void Start()
     {
-        UpdateDebugInfo("=== INICIANDO CubeInteraction ===");
+        if (gameGenerator == null)
+        {
+            gameGenerator = FindObjectOfType<GameGenerator>();
+        }
 
-        // Buscar y asignar el componente GameGenerator
-        gameGenerator = FindObjectOfType<GameGenerator>();
         if (gameGenerator != null)
         {
-            UpdateDebugInfo($"GameGenerator encontrado");
-        }
-        else
-        {
-            UpdateDebugInfo($"ERROR: GameGenerator NO encontrado");
+            UpdateGameDebugInfo($"CubeInteraction START para {gameObject.name}");
         }
 
-        // Buscar y asignar el sistema de pistas
-        hintSystem = FindObjectOfType<HintSystem>();
         if (hintSystem == null)
         {
-            UpdateDebugInfo($"ERROR: No se encontró HintSystem para el cubo {gameObject.name}");
-            Debug.LogWarning($"No se encontró HintSystem para el cubo {gameObject.name}");
+            hintSystem = FindObjectOfType<HintSystem>();
+        }
+
+        if (hintSystem == null)
+        {
+            UpdateGameDebugInfo($"ERROR: No HintSystem para {gameObject.name}");
         }
         else
         {
-            UpdateDebugInfo($"HintSystem encontrado correctamente");
+            UpdateGameDebugInfo($"HintSystem OK para {gameObject.name}");
         }
 
-        // Obtener el componente XRGrabInteractable
-        grabInteractable = GetComponent<XRGrabInteractable>();
+        // NUEVO: Configurar PhysicsGrabbable
+        SetupPhysicsGrabbable();
+    }
 
-        // Suscribirse a los eventos de agarre
-        if (grabInteractable != null)
+    void SetupPhysicsGrabbable()
+    {
+        UpdateGameDebugInfo($"Configurando PhysicsGrabbable para {gameObject.name}");
+
+        // Buscar o agregar PhysicsGrabbable
+        physicsGrabbable = GetComponent<PhysicsGrabbable>();
+        if (physicsGrabbable == null)
         {
-            grabInteractable.selectEntered.AddListener(OnGrabbed);
-            grabInteractable.selectExited.AddListener(OnReleased);
-            UpdateDebugInfo($"Eventos de agarre configurados para {gameObject.name}");
-            Debug.Log($"Eventos de agarre configurados para {gameObject.name}");
+            UpdateGameDebugInfo($"PhysicsGrabbable no encontrado, agregando...");
+            physicsGrabbable = gameObject.AddComponent<PhysicsGrabbable>();
+        }
+
+        // Buscar o agregar Grabbable (requerido por PhysicsGrabbable)
+        var grabbable = GetComponent<Grabbable>();
+        if (grabbable == null)
+        {
+            UpdateGameDebugInfo($"Grabbable no encontrado, agregando...");
+            grabbable = gameObject.AddComponent<Grabbable>();
+        }
+
+        // Asegurarse de que tenga Rigidbody
+        var rb = GetComponent<Rigidbody>();
+        if (rb == null)
+        {
+            UpdateGameDebugInfo($"Rigidbody no encontrado, agregando...");
+            rb = gameObject.AddComponent<Rigidbody>();
+            rb.useGravity = true;
+            rb.isKinematic = false;
+        }
+
+        // Configurar el PhysicsGrabbable con los componentes necesarios
+        if (physicsGrabbable != null && grabbable != null && rb != null)
+        {
+            physicsGrabbable.InjectAllPhysicsGrabbable(grabbable, rb);
+            UpdateGameDebugInfo($"PhysicsGrabbable configurado correctamente");
+        }
+
+        // Obtener la interfaz IPointable
+        pointable = grabbable as IPointable;
+        if (pointable != null)
+        {
+            UpdateGameDebugInfo($"IPointable obtenido, suscribiendo a eventos...");
         }
         else
         {
-            UpdateDebugInfo($"ERROR: No se encontró XRGrabInteractable en {gameObject.name}");
-            Debug.LogWarning($"No se encontró XRGrabInteractable en {gameObject.name}");
+            UpdateGameDebugInfo($"ERROR: No se pudo obtener IPointable");
         }
     }
 
-    void OnDestroy()
+    void OnEnable()
     {
-        // Desuscribirse de los eventos para evitar errores
-        if (grabInteractable != null)
+        if (pointable != null)
         {
-            grabInteractable.selectEntered.RemoveListener(OnGrabbed);
-            grabInteractable.selectExited.RemoveListener(OnReleased);
+            pointable.WhenPointerEventRaised += HandlePointerEvent;
+            UpdateGameDebugInfo($"Eventos de puntero suscritos para {gameObject.name}");
+        }
+    }
+
+    void OnDisable()
+    {
+        if (pointable != null)
+        {
+            pointable.WhenPointerEventRaised -= HandlePointerEvent;
+        }
+    }
+
+    /// <summary>
+    /// Maneja los eventos del sistema de punteros de Oculus
+    /// </summary>
+    private void HandlePointerEvent(PointerEvent evt)
+    {
+        UpdateGameDebugInfo($"[POINTER EVENT] {gameObject.name} - Tipo: {evt.Type}");
+
+        switch (evt.Type)
+        {
+            case PointerEventType.Select:
+                OnCubeGrabbed();
+                break;
+
+            case PointerEventType.Unselect:
+            case PointerEventType.Cancel:
+                OnCubeReleased();
+                break;
+
+            case PointerEventType.Hover:
+                UpdateGameDebugInfo($"[HOVER] {gameObject.name}");
+                break;
+
+            case PointerEventType.Unhover:
+                UpdateGameDebugInfo($"[UNHOVER] {gameObject.name}");
+                break;
         }
     }
 
     /// <summary>
     /// Se llama cuando se agarra el cubo
     /// </summary>
-    void OnGrabbed(SelectEnterEventArgs args)
+    void OnCubeGrabbed()
     {
-        UpdateDebugInfo($"=== EVENTO OnGrabbed DISPARADO ===");
-        UpdateDebugInfo($"CUBO AGARRADO: {gameObject.name}");
-        Debug.Log($"CUBO AGARRADO: {gameObject.name}");
-
-        // Verificar el estado del HintSystem
-        if (hintSystem == null)
-        {
-            UpdateDebugInfo("ERROR: hintSystem es NULL en OnGrabbed");
-            Debug.LogError("hintSystem es NULL en OnGrabbed");
-            return;
-        }
-
-        UpdateDebugInfo($"HintSystem existe: {hintSystem != null}");
-
-        bool hintsEnabled = hintSystem.AreHintsEnabled();
-        UpdateDebugInfo($"Pistas habilitadas: {hintsEnabled}");
-
-        if (hintsEnabled)
-        {
-            UpdateDebugInfo("Las pistas están ACTIVADAS, procesando...");
-
-            // Extraer fila y columna del nombre del cubo
-            string[] splitName = gameObject.name.Split('_');
-            UpdateDebugInfo($"Nombre dividido en {splitName.Length} partes");
-
-            if (splitName.Length >= 3)
-            {
-                UpdateDebugInfo($"Partes del nombre: [{string.Join(", ", splitName)}]");
-
-                int row, col;
-                bool rowParsed = int.TryParse(splitName[1], out row);
-                bool colParsed = int.TryParse(splitName[2], out col);
-
-                UpdateDebugInfo($"Row parseado: {rowParsed} (valor: {row})");
-                UpdateDebugInfo($"Col parseado: {colParsed} (valor: {col})");
-
-                if (rowParsed && colParsed)
-                {
-                    UpdateDebugInfo($"LLAMANDO A ShowGreenMagnetForCube({row},{col})");
-                    Debug.Log($"Mostrando imán verde para cubo {gameObject.name} en posición ({row},{col})");
-
-                    // LLAMADA CRÍTICA
-                    hintSystem.ShowGreenMagnetForCube(row, col);
-
-                    UpdateDebugInfo($"ShowGreenMagnetForCube LLAMADO EXITOSAMENTE");
-                }
-                else
-                {
-                    UpdateDebugInfo($"ERROR: No se pudo parsear row o col");
-                }
-            }
-            else
-            {
-                UpdateDebugInfo($"ERROR: Nombre del cubo no tiene el formato esperado Cube_X_Y");
-            }
-        }
-        else
-        {
-            UpdateDebugInfo("Las pistas están DESACTIVADAS, no se muestra imán");
-        }
+        if (isGrabbed) return; // Evitar duplicados
+        isGrabbed = true;
     }
 
     /// <summary>
     /// Se llama cuando se suelta el cubo
     /// </summary>
-    void OnReleased(SelectExitEventArgs args)
+    void OnCubeReleased()
     {
-        UpdateDebugInfo($"=== EVENTO OnReleased DISPARADO ===");
-        UpdateDebugInfo($"Cubo {gameObject.name} fue soltado");
-        Debug.Log($"Cubo {gameObject.name} fue soltado");
-
-        // Restaurar el color del imán cuando se suelta el cubo
-        if (hintSystem != null)
-        {
-            bool hintsEnabled = hintSystem.AreHintsEnabled();
-            UpdateDebugInfo($"Pistas habilitadas al soltar: {hintsEnabled}");
-
-            if (hintsEnabled)
-            {
-                UpdateDebugInfo("Llamando a RestoreMagnetColors()");
-                hintSystem.RestoreMagnetColors();
-                UpdateDebugInfo("RestoreMagnetColors() llamado exitosamente");
-            }
-        }
-        else
-        {
-            UpdateDebugInfo("ERROR: hintSystem es NULL en OnReleased");
-        }
+        if (!isGrabbed) return; // Evitar duplicados
+        isGrabbed = false;
     }
 
+    // Métodos originales para el sistema de colocación
     void OnTriggerEnter(Collider other)
     {
         if (!isPlaced && other.CompareTag("refCube"))
@@ -189,27 +193,34 @@ public class CubeInteraction : MonoBehaviour
     }
 
     /// <summary>
-    /// Actualiza la información de debug
+    /// Actualiza el panel de debug del GameGenerator
     /// </summary>
-    void UpdateDebugInfo(string message)
+    void UpdateGameDebugInfo(string message)
     {
-        debugInfo.AppendLine($"[CubeInteraction {gameObject.name}] {message}");
-
-        // Imprimir en la consola
-        Debug.Log($"[CubeInteraction {gameObject.name}] {message}");
-
-        // Si el gameGenerator tiene panel de debug, actualizar también ahí
-        if (gameGenerator != null && gameGenerator.debugText != null)
+        if (gameGenerator != null)
         {
-            gameGenerator.debugText.text += $"\n[CUBE] {message}";
+            gameGenerator.UpdateDebugInfo($"[CUBE] {message}");
+        }
+        else
+        {
+            Debug.Log($"[CubeInteraction] {message}");
+        }
+    }
 
-            // Limitar el tamaño del texto
-            string currentText = gameGenerator.debugText.text;
-            string[] lines = currentText.Split('\n');
-            if (lines.Length > 30)
-            {
-                gameGenerator.debugText.text = string.Join("\n", lines, lines.Length - 30, 30);
-            }
+    /// <summary>
+    /// Método público para reconectar eventos (llamado desde GameGenerator)
+    /// </summary>
+    public void ReconnectEvents()
+    {
+        UpdateGameDebugInfo($"ReconnectEvents llamado para {gameObject.name}");
+        SetupPhysicsGrabbable();
+
+        // Re-suscribir a eventos si es necesario
+        if (pointable != null)
+        {
+            pointable.WhenPointerEventRaised -= HandlePointerEvent;
+            pointable.WhenPointerEventRaised += HandlePointerEvent;
+            UpdateGameDebugInfo($"Eventos reconectados");
         }
     }
 }

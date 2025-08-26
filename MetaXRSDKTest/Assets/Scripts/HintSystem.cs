@@ -35,15 +35,14 @@ public class HintSystem : MonoBehaviour
     private GameGenerator gameGenerator;
     private Dictionary<GameObject, Material> originalMagnetMaterials = new Dictionary<GameObject, Material>();
     private Dictionary<GameObject, Dictionary<string, Material>> originalCubeMaterials = new Dictionary<GameObject, Dictionary<string, Material>>();
-    private Dictionary<GameObject, List<GameObject>> visualIndicators = new Dictionary<GameObject, List<GameObject>>();
 
     // Estado interno del sistema de pistas - STATIC para persistir entre cambios
-    private static bool hintsEnabled = false; // STATIC para mantener el estado
+    private static bool hintsEnabled = false;
     private StringBuilder debugInfo = new StringBuilder();
-    private Dictionary<GameObject, Coroutine> activeCoroutines = new Dictionary<GameObject, Coroutine>();
 
-    // NUEVO: Almacenar el imán verde actual
+    // Almacenar el imán verde actual y las caras grises actuales
     private GameObject currentGreenMagnet = null;
+    private List<GameObject> currentGrayFaceCubes = new List<GameObject>();
 
     void Start()
     {
@@ -75,11 +74,11 @@ public class HintSystem : MonoBehaviour
             UpdateDebugInfo("Sistema de pistas iniciado...");
         }
 
-        // IMPORTANTE: Actualizar el texto del botón con el estado persistente
+        // Actualizar el texto del botón con el estado persistente
         UpdateButtonText();
         UpdateDebugInfo($"Estado de pistas recuperado: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")}");
 
-        // NUEVO: Asegurar que el color del botón esté correcto al inicio
+        // Actualizar el color del botón
         UpdateButtonColor();
     }
 
@@ -106,7 +105,7 @@ public class HintSystem : MonoBehaviour
         }
     }
 
-    void UpdateDebugInfo(string message)
+    public void UpdateDebugInfo(string message)
     {
         if (!debugMode) return;
 
@@ -138,11 +137,17 @@ public class HintSystem : MonoBehaviour
 
         if (!hintsEnabled)
         {
-            // Si se desactiva, restaurar materiales inmediatamente
+            // Si se desactivan las pistas, restaurar todo y ocultar círculos
             RestoreAllMaterials();
         }
 
         UpdateDebugInfo($"Sistema: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")}");
+
+        // Notificar al GameGenerator para actualizar los círculos
+        if (gameGenerator != null)
+        {
+            gameGenerator.UpdateCirclesVisibility();
+        }
     }
 
     void UpdateButtonText()
@@ -151,8 +156,6 @@ public class HintSystem : MonoBehaviour
         {
             buttonText.text = hintsEnabled ? "Desactivar pistas" : "Activar pistas";
         }
-
-        // NUEVO: Actualizar el color del botón
         UpdateButtonColor();
     }
 
@@ -177,7 +180,7 @@ public class HintSystem : MonoBehaviour
                     buttonImage.color = HexToColor("85A5DB"); // Azul claro
                 }
 
-                UpdateDebugInfo($"Color del botón actualizado: {(hintsEnabled ? "Azul oscuro (0040B0)" : "Azul claro (85A5DB)")}");
+                UpdateDebugInfo($"Color del botón actualizado: {(hintsEnabled ? "Azul oscuro" : "Azul claro")}");
             }
         }
     }
@@ -187,14 +190,10 @@ public class HintSystem : MonoBehaviour
     /// </summary>
     Color HexToColor(string hex)
     {
-        // Remover # si existe
         hex = hex.Replace("#", "");
-
-        // Convertir hexadecimal a RGB
         byte r = byte.Parse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
         byte g = byte.Parse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
         byte b = byte.Parse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
-
         return new Color32(r, g, b, 255);
     }
 
@@ -207,33 +206,24 @@ public class HintSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Muestra SOLO el imán verde correspondiente a un cubo específico cuando se agarra
+    /// Muestra el imán verde correspondiente a un cubo específico
+    /// Solo se llama desde MagnetCircleDetector cuando se suelta un cubo
     /// </summary>
     public void ShowGreenMagnetForCube(int row, int col)
     {
-        UpdateDebugInfo($"=== ShowGreenMagnetForCube LLAMADO ===");
-        UpdateDebugInfo($"Parámetros: row={row}, col={col}");
+        UpdateDebugInfo($"ShowGreenMagnetForCube llamado para posición ({row},{col})");
 
-        bool enabled = AreHintsEnabled();
-        UpdateDebugInfo($"Pistas habilitadas: {enabled}");
-
-        if (!enabled)
+        if (!AreHintsEnabled())
         {
-            UpdateDebugInfo("SALIENDO: Pistas deshabilitadas");
+            UpdateDebugInfo("Pistas deshabilitadas - no se muestra imán verde");
             return;
         }
 
-        UpdateDebugInfo("Pistas ACTIVADAS, procediendo...");
-
-        // Primero eliminar cualquier imán verde existente
-        UpdateDebugInfo("Destruyendo imán verde anterior (si existe)...");
+        // Destruir cualquier imán verde existente
         DestroyCurrentGreenMagnet();
 
         // Crear nuevo imán verde superpuesto
-        UpdateDebugInfo($"Creando nuevo imán verde en posición ({row},{col})...");
         CreateGreenMagnetOverlay(row, col);
-
-        UpdateDebugInfo($"ShowGreenMagnetForCube COMPLETADO");
     }
 
     /// <summary>
@@ -241,64 +231,34 @@ public class HintSystem : MonoBehaviour
     /// </summary>
     private void CreateGreenMagnetOverlay(int row, int col)
     {
-        UpdateDebugInfo($"=== CreateGreenMagnetOverlay INICIADO ===");
-        UpdateDebugInfo($"Creando overlay para posición ({row},{col})");
-
         Vector3 magnetPosition = GetMagnetPosition(row, col);
-        UpdateDebugInfo($"Posición calculada del imán: {magnetPosition}");
 
-        // Verificar si la posición es válida
         if (magnetPosition == Vector3.zero)
         {
-            UpdateDebugInfo("ERROR: La posición del imán es Vector3.zero - puede ser inválida");
-        }
-
-        // Crear un cubo que servirá como imán verde
-        UpdateDebugInfo("Creando GameObject primitivo (Cube)...");
-        currentGreenMagnet = GameObject.CreatePrimitive(PrimitiveType.Cube);
-
-        if (currentGreenMagnet == null)
-        {
-            UpdateDebugInfo("ERROR: No se pudo crear el GameObject del imán verde");
+            UpdateDebugInfo("ERROR: Posición del imán inválida");
             return;
         }
 
+        // Crear un cubo que servirá como imán verde
+        currentGreenMagnet = GameObject.CreatePrimitive(PrimitiveType.Cube);
         currentGreenMagnet.name = $"GreenMagnetOverlay_{row}_{col}";
-        UpdateDebugInfo($"GameObject creado con nombre: {currentGreenMagnet.name}");
 
         // Posicionar ligeramente encima del imán original
         currentGreenMagnet.transform.position = magnetPosition + Vector3.up * 0.01f;
-        UpdateDebugInfo($"Posición establecida: {currentGreenMagnet.transform.position}");
-
-        // Hacer el imán verde un poco más grande que el original (20% más grande)
         currentGreenMagnet.transform.localScale = new Vector3(0.096f, 0.012f, 0.096f);
-        UpdateDebugInfo($"Escala establecida: {currentGreenMagnet.transform.localScale}");
 
-        // Desactivar el collider para que no interfiera con la física
+        // Desactivar el collider
         Collider greenCollider = currentGreenMagnet.GetComponent<Collider>();
         if (greenCollider != null)
         {
             greenCollider.enabled = false;
-            UpdateDebugInfo("Collider desactivado");
-        }
-        else
-        {
-            UpdateDebugInfo("ADVERTENCIA: No se encontró collider");
         }
 
-        // Aplicar material verde brillante con emisión
+        // Aplicar material verde brillante
         Renderer greenRenderer = currentGreenMagnet.GetComponent<Renderer>();
         if (greenRenderer != null)
         {
-            UpdateDebugInfo("Configurando material verde...");
-
             Material greenMaterial = new Material(Shader.Find("Standard"));
-            if (greenMaterial == null)
-            {
-                UpdateDebugInfo("ERROR: No se pudo crear el material con shader Standard");
-                return;
-            }
-
             greenMaterial.color = new Color(0f, 1f, 0f, 0.9f);
             greenMaterial.SetFloat("_Metallic", 0.3f);
             greenMaterial.SetFloat("_Glossiness", 0.8f);
@@ -307,7 +267,7 @@ public class HintSystem : MonoBehaviour
             greenMaterial.EnableKeyword("_EMISSION");
             greenMaterial.SetColor("_EmissionColor", Color.green * 0.6f);
 
-            // Configurar el material para transparencia
+            // Configurar transparencia
             greenMaterial.SetFloat("_Mode", 3);
             greenMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             greenMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
@@ -318,22 +278,56 @@ public class HintSystem : MonoBehaviour
             greenMaterial.renderQueue = 3000;
 
             greenRenderer.material = greenMaterial;
-            UpdateDebugInfo("Material verde aplicado exitosamente");
-        }
-        else
-        {
-            UpdateDebugInfo("ERROR: No se encontró Renderer en el imán verde");
         }
 
-        // Opcional: Agregar una animación de pulso
-        if (currentGreenMagnet != null)
+        // Agregar animación de pulso
+        StartCoroutine(PulseGreenMagnet(currentGreenMagnet));
+
+        UpdateDebugInfo($"Imán verde creado en posición ({row},{col})");
+    }
+
+    /// <summary>
+    /// Muestra las caras grises para un cubo específico
+    /// Solo se llama desde FacesCircleDetector cuando se suelta un cubo
+    /// </summary>
+    public void ShowGrayFacesForCube(GameObject cube)
+    {
+        if (!AreHintsEnabled() || cube == null)
         {
-            UpdateDebugInfo("Iniciando animación de pulso...");
-            activeCoroutines[currentGreenMagnet] = StartCoroutine(PulseGreenMagnet(currentGreenMagnet));
+            UpdateDebugInfo("No se pueden mostrar caras grises - pistas deshabilitadas o cubo nulo");
+            return;
         }
 
-        UpdateDebugInfo($"=== CreateGreenMagnetOverlay COMPLETADO ===");
-        UpdateDebugInfo($"Imán verde creado: {currentGreenMagnet != null}");
+        UpdateDebugInfo($"Mostrando caras grises para {cube.name}");
+
+        // Guardar materiales originales si no se han guardado
+        if (!originalCubeMaterials.ContainsKey(cube))
+        {
+            originalCubeMaterials[cube] = new Dictionary<string, Material>();
+            Renderer[] renderers = cube.GetComponentsInChildren<Renderer>();
+            foreach (Renderer renderer in renderers)
+            {
+                originalCubeMaterials[cube][renderer.name] = renderer.material;
+            }
+        }
+
+        // Aplicar material gris a todas las caras excepto Face1
+        Renderer[] cubeRenderers = cube.GetComponentsInChildren<Renderer>();
+        foreach (Renderer renderer in cubeRenderers)
+        {
+            if (renderer.name != "Face1")
+            {
+                renderer.material = grayFaceMaterial;
+            }
+        }
+
+        // Agregar a la lista de cubos con caras grises
+        if (!currentGrayFaceCubes.Contains(cube))
+        {
+            currentGrayFaceCubes.Add(cube);
+        }
+
+        UpdateDebugInfo($"Caras grises aplicadas a {cube.name}");
     }
 
     /// <summary>
@@ -343,21 +337,15 @@ public class HintSystem : MonoBehaviour
     {
         if (currentGreenMagnet != null)
         {
-            // Detener animación si existe
-            if (activeCoroutines.ContainsKey(currentGreenMagnet))
-            {
-                StopCoroutine(activeCoroutines[currentGreenMagnet]);
-                activeCoroutines.Remove(currentGreenMagnet);
-            }
-
+            StopAllCoroutines(); // Detener la animación de pulso
             Destroy(currentGreenMagnet);
             currentGreenMagnet = null;
-            UpdateDebugInfo("Imán verde overlay destruido");
+            UpdateDebugInfo("Imán verde destruido");
         }
     }
 
     /// <summary>
-    /// Animación de pulso para el imán verde superpuesto
+    /// Animación de pulso para el imán verde
     /// </summary>
     IEnumerator PulseGreenMagnet(GameObject magnet)
     {
@@ -368,315 +356,60 @@ public class HintSystem : MonoBehaviour
 
         while (magnet != null)
         {
-            float scale = 1f + Mathf.Sin(pulseTime * Mathf.PI * 2f) * 0.15f; // Pulso más notable
+            float scale = 1f + Mathf.Sin(pulseTime * Mathf.PI * 2f) * 0.15f;
             magnet.transform.localScale = new Vector3(
                 originalScale.x * scale,
                 originalScale.y,
                 originalScale.z * scale
             );
 
-            pulseTime += Time.deltaTime * 2f; // Velocidad del pulso
+            pulseTime += Time.deltaTime * 2f;
             yield return null;
         }
     }
 
     /// <summary>
-    /// Restaura SOLO los colores de los imanes (no las caras grises de los cubos)
+    /// Restaura los colores de los imanes (elimina el imán verde)
     /// </summary>
     public void RestoreMagnetColors()
     {
-        // NUEVO: Simplemente destruir el imán verde superpuesto
         DestroyCurrentGreenMagnet();
-
-        // Limpiar cualquier corrutina activa
-        foreach (var coroutine in activeCoroutines.Values)
-        {
-            if (coroutine != null)
-                StopCoroutine(coroutine);
-        }
-        activeCoroutines.Clear();
-
-        UpdateDebugInfo("Imán verde removido");
+        UpdateDebugInfo("Colores de imanes restaurados");
     }
 
     /// <summary>
-    /// Resalta un único imán sin afectar otros elementos
+    /// Restaura las caras grises de los cubos
     /// </summary>
-    private void HighlightSingleMagnet(int row, int col)
+    public void RestoreGrayFaces()
     {
-        GameObject targetMagnet = FindMagnetAtPosition(row, col);
-
-        if (targetMagnet != null)
+        foreach (GameObject cube in currentGrayFaceCubes)
         {
-            // Intentar obtener el renderer del imán o de sus hijos
-            Renderer magnetRenderer = targetMagnet.GetComponent<Renderer>();
-
-            // Si no tiene renderer en el objeto principal, buscar en los hijos
-            if (magnetRenderer == null)
+            if (cube != null && originalCubeMaterials.ContainsKey(cube))
             {
-                magnetRenderer = targetMagnet.GetComponentInChildren<Renderer>();
-            }
-
-            // Si aún no hay renderer, buscar todos los renderers en los hijos
-            if (magnetRenderer == null)
-            {
-                Renderer[] childRenderers = targetMagnet.GetComponentsInChildren<Renderer>();
-                if (childRenderers.Length > 0)
+                Renderer[] renderers = cube.GetComponentsInChildren<Renderer>();
+                foreach (Renderer renderer in renderers)
                 {
-                    // Aplicar el material verde a TODOS los renderers encontrados
-                    foreach (Renderer renderer in childRenderers)
+                    if (originalCubeMaterials[cube].ContainsKey(renderer.name))
                     {
-                        // Guardar material original si no se ha guardado ya
-                        if (!originalMagnetMaterials.ContainsKey(targetMagnet))
-                        {
-                            originalMagnetMaterials[targetMagnet] = renderer.material;
-                        }
-
-                        // Aplicar material verde con emisión para que sea más visible
-                        Material greenMaterial = new Material(Shader.Find("Standard"));
-                        greenMaterial.color = new Color(0f, 1f, 0f, 1f); // Verde brillante
-                        greenMaterial.SetFloat("_Metallic", 0.3f);
-                        greenMaterial.SetFloat("_Glossiness", 0.8f);
-
-                        // Agregar emisión para que brille
-                        greenMaterial.EnableKeyword("_EMISSION");
-                        greenMaterial.SetColor("_EmissionColor", Color.green * 0.5f);
-
-                        renderer.material = greenMaterial;
+                        renderer.material = originalCubeMaterials[cube][renderer.name];
                     }
                 }
-                else
-                {
-                    // Crear indicador visual si no hay renderer
-                    CreateVisualIndicator(targetMagnet, row, col);
-                }
-            }
-            else
-            {
-                // Si encontramos un renderer único, aplicar el material
-                if (!originalMagnetMaterials.ContainsKey(targetMagnet))
-                {
-                    originalMagnetMaterials[targetMagnet] = magnetRenderer.material;
-                }
-
-                // Crear material verde con emisión
-                Material greenMaterial = new Material(Shader.Find("Standard"));
-                greenMaterial.color = new Color(0f, 1f, 0f, 1f);
-                greenMaterial.SetFloat("_Metallic", 0.3f);
-                greenMaterial.SetFloat("_Glossiness", 0.8f);
-                greenMaterial.EnableKeyword("_EMISSION");
-                greenMaterial.SetColor("_EmissionColor", Color.green * 0.5f);
-
-                magnetRenderer.material = greenMaterial;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Método principal para mostrar pistas cuando se detecta un error en verificación
-    /// SOLO muestra caras grises, NO imanes verdes
-    /// </summary>
-    public void ShowHintsForIncorrectCubes()
-    {
-        if (!AreHintsEnabled())
-        {
-            UpdateDebugInfo("Pistas desactivadas - no se muestran");
-            return;
-        }
-
-        UpdateDebugInfo("=== MOSTRANDO PISTAS (SOLO CARAS GRISES) ===");
-
-        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
-        int incorrectCount = 0;
-
-        foreach (GameObject cube in cubes)
-        {
-            string[] splitName = cube.name.Split('_');
-            if (splitName.Length < 3) continue;
-
-            int row, col;
-            if (!int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
-                continue;
-
-            CubeState state = AnalyzeCubeState(cube, row, col);
-
-            if (state != CubeState.Correct)
-            {
-                incorrectCount++;
-                UpdateDebugInfo($"Cubo {cube.name}: {state}");
-
-                // SOLO mostrar caras grises para cubos con rotación incorrecta
-                if (state == CubeState.CorrectPosition_WrongFace || state == CubeState.BothWrong)
-                {
-                    GrayOutIncorrectFaces(cube);
-                }
+                originalCubeMaterials.Remove(cube);
             }
         }
 
-        UpdateDebugInfo($"Total cubos incorrectos: {incorrectCount} (mostrando solo caras grises)");
-
-        // Restaurar SOLO las caras grises después de 3 segundos
-        StartCoroutine(RestoreGrayFacesAfterDelay(3f));
+        currentGrayFaceCubes.Clear();
+        UpdateDebugInfo("Caras grises restauradas");
     }
 
     /// <summary>
-    /// Muestra pistas para una lista específica de cubos
-    /// SOLO muestra caras grises, NO imanes verdes
+    /// Restaura todos los materiales a su estado original
     /// </summary>
-    public void ShowHintsForSpecificCubes(List<GameObject> cubes)
+    void RestoreAllMaterials()
     {
-        if (!AreHintsEnabled())
-        {
-            UpdateDebugInfo("Pistas desactivadas - no se muestran");
-            return;
-        }
-
-        UpdateDebugInfo("=== MOSTRANDO PISTAS PARA CUBOS ESPECÍFICOS (SOLO CARAS GRISES) ===");
-
-        int processedCount = 0;
-
-        foreach (GameObject cube in cubes)
-        {
-            if (cube == null) continue;
-
-            string[] splitName = cube.name.Split('_');
-            if (splitName.Length < 3) continue;
-
-            int row, col;
-            if (!int.TryParse(splitName[1], out row) || !int.TryParse(splitName[2], out col))
-                continue;
-
-            CubeState state = AnalyzeCubeState(cube, row, col);
-
-            if (state != CubeState.Correct)
-            {
-                processedCount++;
-                UpdateDebugInfo($"Cubo {cube.name}: {state}");
-
-                // SOLO mostrar caras grises para cubos con rotación incorrecta
-                if (state == CubeState.CorrectPosition_WrongFace || state == CubeState.BothWrong)
-                {
-                    GrayOutIncorrectFaces(cube);
-                }
-            }
-        }
-
-        UpdateDebugInfo($"Pistas mostradas para {processedCount} cubos (solo caras grises)");
-
-        // Restaurar SOLO las caras grises después de 10 segundos
-        StartCoroutine(RestoreGrayFacesAfterDelay(10f));
-    }
-
-    /// <summary>
-    /// Estados posibles de un cubo
-    /// </summary>
-    enum CubeState
-    {
-        Correct,
-        WrongPosition_CorrectFace,
-        CorrectPosition_WrongFace,
-        BothWrong
-    }
-
-    /// <summary>
-    /// Analiza el estado de un cubo comparándolo con su posición y rotación objetivo
-    /// </summary>
-    CubeState AnalyzeCubeState(GameObject cube, int targetRow, int targetCol)
-    {
-        Vector3 targetPosition = GetMagnetPosition(targetRow, targetCol);
-        float distance = Vector3.Distance(cube.transform.position, targetPosition);
-
-        Quaternion targetRotation = Quaternion.identity;
-        float angle = Quaternion.Angle(cube.transform.rotation, targetRotation);
-
-        bool positionCorrect = distance <= 0.1f;
-        bool rotationCorrect = angle <= 10.0f;
-
-        if (positionCorrect && rotationCorrect)
-            return CubeState.Correct;
-        else if (!positionCorrect && rotationCorrect)
-            return CubeState.WrongPosition_CorrectFace;
-        else if (positionCorrect && !rotationCorrect)
-            return CubeState.CorrectPosition_WrongFace;
-        else
-            return CubeState.BothWrong;
-    }
-
-    /// <summary>
-    /// Crea un indicador visual cuando no hay renderer
-    /// </summary>
-    void CreateVisualIndicator(GameObject magnet, int row, int col)
-    {
-        // Crear un cubo verde como indicador visual
-        GameObject indicator = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        indicator.name = $"HintIndicator_{row}_{col}";
-        indicator.transform.position = magnet.transform.position + Vector3.up * 0.05f;
-        indicator.transform.localScale = new Vector3(0.08f, 0.01f, 0.08f);
-
-        // Aplicar material verde brillante
-        Renderer indicatorRenderer = indicator.GetComponent<Renderer>();
-        Material greenMaterial = new Material(Shader.Find("Standard"));
-        greenMaterial.color = Color.green;
-        greenMaterial.EnableKeyword("_EMISSION");
-        greenMaterial.SetColor("_EmissionColor", Color.green * 0.8f);
-        indicatorRenderer.material = greenMaterial;
-
-        // Guardar referencia para poder eliminarlo después
-        if (!visualIndicators.ContainsKey(magnet))
-        {
-            visualIndicators[magnet] = new List<GameObject>();
-        }
-        visualIndicators[magnet].Add(indicator);
-
-        UpdateDebugInfo($"Indicador visual creado para imán ({row},{col})");
-    }
-
-    /// <summary>
-    /// Pone en gris las caras incorrectas del cubo
-    /// </summary>
-    void GrayOutIncorrectFaces(GameObject cube)
-    {
-        Renderer[] cubeRenderers = cube.GetComponentsInChildren<Renderer>();
-
-        // Guardar materiales originales si no se han guardado ya
-        if (!originalCubeMaterials.ContainsKey(cube))
-        {
-            originalCubeMaterials[cube] = new Dictionary<string, Material>();
-            foreach (Renderer renderer in cubeRenderers)
-            {
-                originalCubeMaterials[cube][renderer.name] = renderer.material;
-            }
-        }
-
-        // Aplicar material gris a todas las caras excepto Face1 (la correcta)
-        foreach (Renderer renderer in cubeRenderers)
-        {
-            if (renderer.name != "Face1")
-            {
-                renderer.material = grayFaceMaterial;
-            }
-        }
-
-        UpdateDebugInfo($"Cubo {cube.name} - caras incorrectas en GRIS");
-    }
-
-    /// <summary>
-    /// Encuentra el imán en una posición específica
-    /// </summary>
-    GameObject FindMagnetAtPosition(int row, int col)
-    {
-        Vector3 expectedPosition = GetMagnetPosition(row, col);
-        GameObject[] magnets = GameObject.FindGameObjectsWithTag("refCube");
-
-        foreach (GameObject magnet in magnets)
-        {
-            if (Vector3.Distance(magnet.transform.position, expectedPosition) < 0.01f)
-            {
-                return magnet;
-            }
-        }
-
-        return null;
+        RestoreMagnetColors();
+        RestoreGrayFaces();
+        UpdateDebugInfo("Todos los materiales restaurados");
     }
 
     /// <summary>
@@ -684,6 +417,16 @@ public class HintSystem : MonoBehaviour
     /// </summary>
     Vector3 GetMagnetPosition(int row, int col)
     {
+        if (gameGenerator == null)
+        {
+            gameGenerator = FindObjectOfType<GameGenerator>();
+            if (gameGenerator == null)
+            {
+                UpdateDebugInfo("ERROR: No se pudo encontrar GameGenerator");
+                return Vector3.zero;
+            }
+        }
+
         if (gameGenerator != null)
         {
             GameObject tableCenterObject = gameGenerator.tableCenterObject;
@@ -696,11 +439,13 @@ public class HintSystem : MonoBehaviour
                 float puzzleWidth = gameGenerator.columns * cubeSize;
                 float puzzleHeight = gameGenerator.rows * cubeSize;
 
-                return new Vector3(
+                Vector3 position = new Vector3(
                     tableCenter.x - puzzleWidth / 2 + col * cubeSize * 0.8f,
                     tableCenter.y + magnetHeightOffset,
                     tableCenter.z - puzzleHeight / 2 + row * cubeSize * 0.8f
                 );
+
+                return position;
             }
         }
 
@@ -708,69 +453,12 @@ public class HintSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Restaura SOLO las caras grises después de un retraso
-    /// </summary>
-    IEnumerator RestoreGrayFacesAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        RestoreGrayFaces();
-        UpdateDebugInfo("Caras grises restauradas automáticamente");
-    }
-
-    /// <summary>
-    /// Restaura SOLO las caras grises de los cubos
-    /// </summary>
-    void RestoreGrayFaces()
-    {
-        // Restaurar solo materiales de cubos
-        foreach (var cubeEntry in originalCubeMaterials)
-        {
-            if (cubeEntry.Key != null)
-            {
-                Renderer[] renderers = cubeEntry.Key.GetComponentsInChildren<Renderer>();
-                foreach (Renderer renderer in renderers)
-                {
-                    if (cubeEntry.Value.ContainsKey(renderer.name))
-                    {
-                        renderer.material = cubeEntry.Value[renderer.name];
-                    }
-                }
-            }
-        }
-
-        originalCubeMaterials.Clear();
-        UpdateDebugInfo("Caras grises restauradas");
-    }
-
-    /// <summary>
-    /// Restaura todos los materiales a su estado original
-    /// </summary>
-    void RestoreAllMaterials()
-    {
-        // Detener todas las corrutinas activas
-        foreach (var coroutine in activeCoroutines.Values)
-        {
-            if (coroutine != null)
-                StopCoroutine(coroutine);
-        }
-        activeCoroutines.Clear();
-
-        // Restaurar materiales de cubos
-        RestoreGrayFaces();
-
-        // NUEVO: Destruir el imán verde superpuesto si existe
-        DestroyCurrentGreenMagnet();
-
-        UpdateDebugInfo("Todos los materiales restaurados");
-    }
-
-    /// <summary>
     /// Método público para limpiar el sistema cuando se cambia de puzzle
     /// </summary>
     public void OnPuzzleChanged()
     {
-        // Limpiar solo los materiales pero mantener el estado de activación
+        // Limpiar todos los materiales pero mantener el estado de activación
         RestoreAllMaterials();
-        UpdateDebugInfo($"Puzzle cambiado - Estado de pistas mantenido: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")}");
+        UpdateDebugInfo($"Puzzle cambiado - Estado mantenido: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")}");
     }
 }
