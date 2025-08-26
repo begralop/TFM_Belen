@@ -133,10 +133,49 @@ public class HintSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// Alternar el estado de las pistas al hacer clic en el botón
+    /// Desactiva forzadamente las pistas (llamado desde MemoryModeSystem)
     /// </summary>
+    public void ForceDisableHints()
+    {
+        if (hintsEnabled)
+        {
+            hintsEnabled = false;
+            UpdateButtonText();
+
+            // Restaurar todos los materiales
+            RestoreAllMaterials();
+
+            UpdateDebugInfo("Pistas desactivadas por activación de modo memoria");
+
+            // Notificar al GameGenerator para actualizar los círculos
+            if (gameGenerator != null)
+            {
+                gameGenerator.UpdateCirclesVisibility();
+            }
+
+            // Si hay un sistema de memoria, verificar que esté activo
+            MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+            if (memorySystem != null && !memorySystem.IsMemoryModeEnabled())
+            {
+                Debug.LogWarning("Modo memoria no está activo cuando debería estarlo");
+            }
+        }
+    }
+
+    // Modifica el método ToggleHints existente para incluir la verificación del modo memoria:
     void ToggleHints()
     {
+        // Si se van a activar las pistas, primero verificar si el modo memoria está activo
+        if (!hintsEnabled)
+        {
+            MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+            if (memorySystem != null && memorySystem.IsMemoryModeEnabled())
+            {
+                Debug.Log("Desactivando modo memoria para activar pistas");
+                memorySystem.ForceDisableMemoryMode();
+            }
+        }
+
         hintsEnabled = !hintsEnabled;
         UpdateButtonText();
 
