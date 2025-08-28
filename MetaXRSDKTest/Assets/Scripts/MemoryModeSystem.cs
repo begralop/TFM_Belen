@@ -508,10 +508,9 @@ public class MemoryModeSystem : MonoBehaviour
 
     public void OnPuzzleChanged()
     {
-        if (memoryModeActive)
-        {
-            ForceDisableMemoryMode();
-        }
+
+         ForceDisableMemoryMode();
+        
     }
 
     void OnDestroy()
