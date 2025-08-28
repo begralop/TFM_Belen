@@ -49,11 +49,23 @@ public class MemoryModeSystem : MonoBehaviour
     [Header("Material Gris para Ocultar")]
     public Material grayMaterial;
 
+    // Añade estas variables al principio de la clase MemoryModeSystem si no las tienes:
+    [Header("Configuración de Grid Aleatorio")]
+    [Tooltip("Tamaño mínimo del grid aleatorio")]
+    public int minGridSize = 2;
+    [Tooltip("Tamaño máximo del grid aleatorio")]
+    public int maxGridSize = 4;
+
     // Estado interno
     private bool memoryModeActive = false;
     private bool memoryModeEnabled = false;
     private float visibleTime = 2f;
     private float hiddenTime = 3f;
+
+    // NUEVO: Variables para recordar el tamaño del grid actual
+    private int currentRows = 0;
+    private int currentColumns = 0;
+    private bool needsRegeneration = false;
 
     // Referencias
     private GameGenerator gameGenerator;
@@ -85,6 +97,19 @@ public class MemoryModeSystem : MonoBehaviour
         // Ocultar panel de control inicialmente
         if (memoryControlPanel != null)
             memoryControlPanel.SetActive(false);
+
+        // Obtener el tamaño inicial del grid
+        UpdateCurrentGridSize();
+    }
+
+    void UpdateCurrentGridSize()
+    {
+        GridCreator grid = FindObjectOfType<GridCreator>();
+        if (grid != null)
+        {
+            currentRows = grid.rows;
+            currentColumns = grid.columns;
+        }
     }
 
     void SetupButtons()
@@ -160,11 +185,11 @@ public class MemoryModeSystem : MonoBehaviour
             {
                 if (memoryModeEnabled)
                 {
-                    buttonImage.color = HexToColor("008A06"); // Rojo oscuro
+                    buttonImage.color = HexToColor("008A06"); // Verde oscuro
                 }
                 else
                 {
-                    buttonImage.color = HexToColor("58DB5E"); // Azul claro
+                    buttonImage.color = HexToColor("58DB5E"); // Verde claro
                 }
             }
         }
@@ -175,13 +200,11 @@ public class MemoryModeSystem : MonoBehaviour
             {
                 if (memoryModeActive)
                 {
-                    // Color rojo cuando el modo está activo (el botón dirá "Detener")
-                    buttonImage.color = HexToColor("0040B0"); // Un rojo para indicar "detener"
+                    buttonImage.color = HexToColor("0040B0"); // Azul oscuro
                 }
                 else
                 {
-                    // Color azul/verde cuando está inactivo (el botón dirá "Iniciar")
-                    buttonImage.color = HexToColor("85A5DB"); // Un azul para indicar "iniciar"
+                    buttonImage.color = HexToColor("85A5DB"); // Azul claro
                 }
             }
         }
@@ -231,6 +254,46 @@ public class MemoryModeSystem : MonoBehaviour
         Debug.Log($"Modo Memoria Habilitado: {memoryModeEnabled}");
     }
 
+    // <summary>
+    /// Método llamado cuando cambia el tamaño del grid
+    /// </summary>
+    public void OnGridSizeChanged(int newRows, int newColumns)
+    {
+        UpdateDebugInfo($"Grid cambió de {currentRows}x{currentColumns} a {newRows}x{newColumns}");
+
+        bool sizeChanged = (currentRows != newRows || currentColumns != newColumns);
+
+        if (sizeChanged)
+        {
+            // Actualizar el tamaño actual
+            currentRows = newRows;
+            currentColumns = newColumns;
+
+            // Si el modo memoria está activo, detenerlo primero
+            if (memoryModeActive)
+            {
+                memoryModeActive = false;
+                StopMemoryMode();
+                UpdateDebugInfo("Modo memoria detenido por cambio de grid");
+            }
+
+            // Limpiar todos los controladores de memoria existentes
+            StopAllCubeControllers();
+            cubeControllers.Clear();
+            originalCubeMaterials.Clear();
+
+            // Marcar que necesita regeneración cuando se vuelva a activar
+            if (memoryModeEnabled)
+            {
+                needsRegeneration = true;
+                UpdateDebugInfo($"Grid cambió a {newRows}x{newColumns} - Presiona 'Iniciar' para regenerar con el nuevo grid");
+            }
+
+            UpdateDisplays();
+        }
+    }
+
+
     public void ActivateMemoryDirect()
     {
         if (!memoryModeEnabled)
@@ -248,52 +311,157 @@ public class MemoryModeSystem : MonoBehaviour
         }
         else
         {
-            // Verificar si hay cubos, si no, generar el juego primero
-            GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
-
-            if (cubes.Length == 0)
+            // SIEMPRE verificar el tamaño actual del grid antes de proceder
+            GridCreator grid = FindObjectOfType<GridCreator>();
+            if (grid != null)
             {
-                UpdateDebugInfo("No hay cubos - generando juego");
+                bool gridChanged = (grid.rows != currentRows || grid.columns != currentColumns);
+                if (gridChanged)
+                {
+                    UpdateDebugInfo($"Grid detectado diferente: actual {grid.rows}x{grid.columns} vs memoria {currentRows}x{currentColumns}");
+                    currentRows = grid.rows;
+                    currentColumns = grid.columns;
 
-                // Verificar si hay un puzzle seleccionado
+                    // Limpiar todos los cubos y magnetos existentes
+                    GameObject[] existingCubes = GameObject.FindGameObjectsWithTag("cube");
+                    GameObject[] existingMagnets = GameObject.FindGameObjectsWithTag("refCube");
+
+                    foreach (GameObject cube in existingCubes)
+                    {
+                        Destroy(cube);
+                    }
+                    foreach (GameObject magnet in existingMagnets)
+                    {
+                        Destroy(magnet);
+                    }
+
+                    UpdateDebugInfo($"Limpiados {existingCubes.Length} cubos y {existingMagnets.Length} magnetos del grid anterior");
+                    needsRegeneration = true;
+                }
+            }
+
+            // Verificar si hay cubos Y si coinciden con el grid actual
+            GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+            int expectedCubes = currentRows * currentColumns;
+
+            bool needsGeneration = (cubes.Length == 0) || (cubes.Length != expectedCubes) || needsRegeneration;
+
+            if (needsGeneration)
+            {
+                UpdateDebugInfo($"Regeneración necesaria: Cubos actuales={cubes.Length}, Esperados={expectedCubes}, Grid={currentRows}x{currentColumns}");
+
+                // Limpiar cualquier cubo restante
+                foreach (GameObject cube in cubes)
+                {
+                    Destroy(cube);
+                }
+                GameObject[] magnets = GameObject.FindGameObjectsWithTag("refCube");
+                foreach (GameObject magnet in magnets)
+                {
+                    Destroy(magnet);
+                }
+
+                // Verificar si hay puzzle seleccionado
                 GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
                 if (curvedBackground != null)
                 {
                     Image bgImage = curvedBackground.GetComponent<Image>();
                     if (bgImage != null && bgImage.sprite != null)
                     {
-                        // Hay un puzzle seleccionado, generar el juego
                         if (gameGenerator != null)
                         {
+                            // Actualizar el grid en GameGenerator antes de generar
+                            gameGenerator.rows = currentRows;
+                            gameGenerator.columns = currentColumns;
                             gameGenerator.GenerateGame();
                             StartCoroutine(ActivateMemoryAfterGeneration());
                         }
                     }
                     else
                     {
-                        // No hay puzzle seleccionado, seleccionar uno aleatorio
                         SelectRandomPuzzle();
                         StartCoroutine(GenerateAndActivateMemory());
                     }
                 }
-                else
-                {
-                    UpdateDebugInfo("ERROR: No se encontró curvedBackground");
-                }
+
+                needsRegeneration = false;
             }
             else
             {
+                // Los cubos existen y coinciden con el grid
                 memoryModeActive = true;
                 StartMemoryMode();
-                UpdateDebugInfo("Modo memoria ACTIVADO");
+                UpdateDebugInfo($"Modo memoria ACTIVADO con {cubes.Length} cubos (grid {currentRows}x{currentColumns})");
             }
         }
 
         UpdateDisplays();
     }
 
+    /// <summary>
+    /// NUEVO: Regenera los cubos con el nuevo tamaño de grid
+    /// </summary>
+    void RegenerateForNewGrid()
+    {
+        // Limpiar cubos existentes
+        if (gameGenerator != null)
+        {
+            // Primero detener cualquier modo memoria activo
+            StopMemoryMode();
+
+            // Verificar si hay un puzzle seleccionado
+            GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
+            if (curvedBackground != null)
+            {
+                Image bgImage = curvedBackground.GetComponent<Image>();
+                if (bgImage != null && bgImage.sprite != null)
+                {
+                    // Hay un puzzle seleccionado, regenerar el juego
+                    gameGenerator.GenerateGame();
+                    StartCoroutine(ActivateMemoryAfterGeneration());
+                }
+                else
+                {
+                    // No hay puzzle seleccionado, seleccionar uno aleatorio
+                    SelectRandomPuzzle();
+                    StartCoroutine(GenerateAndActivateMemory());
+                }
+            }
+        }
+    }
+    // Reemplaza el método SelectRandomPuzzle completo con este:
     void SelectRandomPuzzle()
     {
+        // Primero, establecer un tamaño de grid aleatorio
+        GridCreator gridCreator = FindObjectOfType<GridCreator>();
+        if (gridCreator != null)
+        {
+            // Generar tamaño aleatorio usando los valores configurables
+            // Asegurar que nunca exceda 4x4 para que quepa en el espacio
+            int safeMaxSize = Mathf.Min(maxGridSize, 4);
+            int randomRows = Random.Range(minGridSize, safeMaxSize + 1);
+            int randomColumns = Random.Range(minGridSize, safeMaxSize + 1);
+
+            // Actualizar los sliders si existen
+            if (gridCreator.rowsSlider != null)
+            {
+                gridCreator.rowsSlider.value = randomRows;
+            }
+            if (gridCreator.columnsSlider != null)
+            {
+                gridCreator.columnsSlider.value = randomColumns;
+            }
+
+            // Cambiar el tamaño del grid
+            gridCreator.changeSize(randomRows, randomColumns);
+
+            // Actualizar nuestros valores locales
+            currentRows = randomRows;
+            currentColumns = randomColumns;
+
+            UpdateDebugInfo($"Grid aleatorio establecido: {randomRows}x{randomColumns}");
+        }
+
         // Buscar todos los toggles de puzzles
         Toggle[] puzzleToggles = FindObjectsOfType<Toggle>();
         List<Toggle> validToggles = new List<Toggle>();
@@ -373,7 +541,7 @@ public class MemoryModeSystem : MonoBehaviour
     {
         if (gameGenerator != null)
         {
-            gameGenerator.UpdateDebugInfo(message);
+            gameGenerator.UpdateDebugInfo("[MEMORIA] " + message);
         }
         else
         {
@@ -387,6 +555,7 @@ public class MemoryModeSystem : MonoBehaviour
         {
             memoryModeEnabled = false;
             memoryModeActive = false;
+            needsRegeneration = false;
 
             if (memoryControlPanel != null)
                 memoryControlPanel.SetActive(false);
@@ -508,9 +677,7 @@ public class MemoryModeSystem : MonoBehaviour
 
     public void OnPuzzleChanged()
     {
-
-         ForceDisableMemoryMode();
-        
+        ForceDisableMemoryMode();
     }
 
     void OnDestroy()
@@ -531,6 +698,12 @@ public class CubeMemoryController : MonoBehaviour
     private Dictionary<string, Material> originalMaterials = new Dictionary<string, Material>();
     private Coroutine memoryCoroutine;
 
+    // NUEVO: Variables para el haz de luz
+    private LineRenderer lightBeam;
+    private Vector3 targetMagnetPosition;
+    private bool hasLightBeam = false;
+    private Material lightBeamMaterial;
+
     public void Initialize(float visible, float hidden, float startOffset, Material gray)
     {
         visibleTime = visible;
@@ -538,6 +711,9 @@ public class CubeMemoryController : MonoBehaviour
         grayMaterial = gray;
 
         SaveOriginalMaterials();
+
+        // NUEVO: Configurar el haz de luz
+        SetupLightBeam();
 
         float cycleTime = visible + hidden;
         float offsetInCycle = startOffset % cycleTime;
@@ -553,6 +729,121 @@ public class CubeMemoryController : MonoBehaviour
             (cycleTime - offsetInCycle);
 
         memoryCoroutine = StartCoroutine(MemoryCycle(remainingTime));
+    }
+
+    // NUEVO: Configurar el LineRenderer para el haz de luz
+    void SetupLightBeam()
+    {
+        // Obtener la posición del imán correspondiente
+        string[] splitName = gameObject.name.Split('_');
+        if (splitName.Length >= 3)
+        {
+            int row, col;
+            if (int.TryParse(splitName[1], out row) && int.TryParse(splitName[2], out col))
+            {
+                // Buscar el GameGenerator para obtener la posición del imán
+                GameGenerator gameGen = FindObjectOfType<GameGenerator>();
+                if (gameGen != null)
+                {
+                    targetMagnetPosition = gameGen.GetMagnetPosition(row, col);
+
+                    // Crear el LineRenderer
+                    lightBeam = gameObject.AddComponent<LineRenderer>();
+
+                    // Configurar el material del haz
+                    CreateLightBeamMaterial();
+                    lightBeam.material = lightBeamMaterial;
+
+                    // Configurar propiedades del LineRenderer
+                    lightBeam.startWidth = 0.005f; // Ancho inicial del haz
+                    lightBeam.endWidth = 0.002f;   // Ancho final (más delgado)
+                    lightBeam.positionCount = 2;
+
+                    // Configurar el gradiente de color
+                    Gradient gradient = new Gradient();
+                    gradient.SetKeys(
+                        new GradientColorKey[] {
+                            new GradientColorKey(new Color(0.5f, 1f, 1f, 1f), 0.0f),  // Cyan claro
+                            new GradientColorKey(new Color(0f, 0.8f, 1f, 1f), 1.0f)    // Azul brillante
+                        },
+                        new GradientAlphaKey[] {
+                            new GradientAlphaKey(0.8f, 0.0f),  // Semi-transparente al inicio
+                            new GradientAlphaKey(0.3f, 1.0f)   // Más transparente al final
+                        }
+                    );
+                    lightBeam.colorGradient = gradient;
+
+                    // Usar worldspace
+                    lightBeam.useWorldSpace = true;
+
+                    // Suavizar el haz
+                    lightBeam.numCapVertices = 5;
+                    lightBeam.numCornerVertices = 5;
+
+                    hasLightBeam = true;
+
+                    Debug.Log($"Haz de luz configurado para {gameObject.name} hacia posición {targetMagnetPosition}");
+                }
+            }
+        }
+    }
+    // Opción 1: Haz con animación de energía (reemplazar el método Update)
+    void Update()
+    {
+        if (hasLightBeam && lightBeam != null)
+        {
+            Vector3 cubeCenter = transform.position;
+
+            // Crear un efecto de onda en el haz
+            int segments = 20;
+            lightBeam.positionCount = segments;
+
+            for (int i = 0; i < segments; i++)
+            {
+                float t = i / (float)(segments - 1);
+                Vector3 point = Vector3.Lerp(cubeCenter, targetMagnetPosition, t);
+
+                // Añadir una onda sinusoidal perpendicular a la dirección
+                if (i > 0 && i < segments - 1)
+                {
+                    float wave = Mathf.Sin(t * Mathf.PI * 4 + Time.time * 5) * 0.01f;
+                    Vector3 perpendicular = Vector3.Cross(targetMagnetPosition - cubeCenter, Vector3.up).normalized;
+                    point += perpendicular * wave;
+                }
+
+                lightBeam.SetPosition(i, point);
+            }
+
+            // Pulso de intensidad
+            float pulse = 0.8f + Mathf.Sin(Time.time * 3f) * 0.2f;
+            lightBeam.startWidth = 0.008f * pulse;
+            lightBeam.endWidth = 0.003f * pulse;
+        }
+    }
+
+    // NUEVO: Crear material emisivo para el haz
+    void CreateLightBeamMaterial()
+    {
+        lightBeamMaterial = new Material(Shader.Find("Sprites/Default"));
+        lightBeamMaterial.color = new Color(0.3f, 0.8f, 1f, 0.5f); // Azul cyan semi-transparente
+
+        // Si es posible usar un shader con emisión
+        if (Shader.Find("Standard") != null)
+        {
+            lightBeamMaterial = new Material(Shader.Find("Standard"));
+            lightBeamMaterial.SetFloat("_Mode", 3); // Transparent mode
+            lightBeamMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            lightBeamMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            lightBeamMaterial.SetInt("_ZWrite", 0);
+            lightBeamMaterial.DisableKeyword("_ALPHATEST_ON");
+            lightBeamMaterial.EnableKeyword("_ALPHABLEND_ON");
+            lightBeamMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            lightBeamMaterial.renderQueue = 3000;
+
+            lightBeamMaterial.color = new Color(0.3f, 0.8f, 1f, 0.3f);
+            lightBeamMaterial.EnableKeyword("_EMISSION");
+            lightBeamMaterial.SetColor("_EmissionColor", new Color(0.3f, 0.8f, 1f) * 0.5f);
+        }
     }
 
     public void UpdateTimes(float visible, float hidden)
@@ -597,7 +888,6 @@ public class CubeMemoryController : MonoBehaviour
         Renderer[] renderers = GetComponentsInChildren<Renderer>();
         foreach (Renderer renderer in renderers)
         {
-            // Solo aplicar gris a las caras incorrectas (no a Face1)
             if (renderer.name != "Face1" && grayMaterial != null)
             {
                 renderer.material = grayMaterial;
@@ -624,6 +914,20 @@ public class CubeMemoryController : MonoBehaviour
             StopCoroutine(memoryCoroutine);
             memoryCoroutine = null;
         }
+
+        // NUEVO: Limpiar el haz de luz
+        if (lightBeam != null)
+        {
+            Destroy(lightBeam);
+            lightBeam = null;
+        }
+
+        if (lightBeamMaterial != null)
+        {
+            Destroy(lightBeamMaterial);
+            lightBeamMaterial = null;
+        }
+
         RestoreOriginalMaterials();
     }
 

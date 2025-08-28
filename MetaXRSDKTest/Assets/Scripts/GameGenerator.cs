@@ -331,7 +331,45 @@ public class GameGenerator : MonoBehaviour
 
         return null;
     }
+    /// <summary>
+    /// Método llamado cuando cambia el tamaño del grid
+    /// </summary>
+    public void OnGridSizeChanged(int newRows, int newColumns)
+    {
+        UpdateDebugInfo($"GameGenerator: Grid cambió de {rows}x{columns} a {newRows}x{newColumns}");
 
+        // Actualizar los valores internos
+        rows = newRows;
+        columns = newColumns;
+
+        // Limpiar cubos y magnetos actuales
+        ClearCurrentCubes();
+        ClearCurrentMagnets();
+
+        // Resetear contadores
+        placedCubesCount = 0;
+        puzzleCompleted = false;
+        resultAlreadyShown = false;
+
+        // Limpiar materiales de otros puzzles para regenerarlos con el nuevo tamaño
+        otherPuzzleMaterials.Clear();
+
+        // Si hay un puzzle seleccionado, regenerar materiales
+        if (selectedImage != null && selectedImage.sprite != null)
+        {
+            GenerateMaterialsFromPanelImages();
+            UpdateDebugInfo($"Materiales regenerados para grid {rows}x{columns}");
+        }
+
+        // Notificar al sistema de memoria sobre el cambio
+        MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+        if (memorySystem != null)
+        {
+            memorySystem.OnGridSizeChanged(newRows, newColumns);
+        }
+
+        UpdateDebugInfo($"Grid actualizado a {rows}x{columns} - Cubos y magnetos limpiados");
+    }
     public void CloseResultPanel()
     {
         resultPanel.SetActive(false);
