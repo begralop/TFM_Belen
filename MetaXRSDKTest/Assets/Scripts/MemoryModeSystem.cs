@@ -12,13 +12,15 @@ public class MemoryModeSystem : MonoBehaviour
     [Tooltip("Texto del botón principal")]
     public TextMeshProUGUI memoryModeMainButtonText;
 
-    [Header("Panel de Control (aparece al activar)")]
+    [Header("Panel de Control")]
     [Tooltip("Panel con controles de tiempo que aparece al activar el modo")]
     public GameObject memoryControlPanel;
 
-    [Header("Indicador Visual en Mesa")]
-    [Tooltip("GameObject círculo que aparece en la mesa - tocarlo activa el modo")]
-    public GameObject memoryCircle;
+    [Header("Botón de Activación Directa")]
+    [Tooltip("Botón para activar directamente el modo memoria")]
+    public Button activateMemoryButton;
+    [Tooltip("Texto del botón de activación")]
+    public TextMeshProUGUI activateButtonText;
 
     [Header("Control de Tiempo Visible")]
     [Tooltip("Texto que muestra el tiempo visible")]
@@ -38,18 +40,18 @@ public class MemoryModeSystem : MonoBehaviour
 
     [Header("Configuración")]
     [Tooltip("Tiempo mínimo en segundos")]
-    public float minTime = 0.5f;
+    public float minTime = 1f;
     [Tooltip("Tiempo máximo en segundos")]
-    public float maxTime = 10f;
+    public float maxTime = 30f;
     [Tooltip("Incremento/decremento por click")]
-    public float timeStep = 0.5f;
+    public float timeStep = 1f;
 
     [Header("Material Gris para Ocultar")]
     public Material grayMaterial;
 
     // Estado interno
     private bool memoryModeActive = false;
-    private bool memoryModeEnabled = false; // Si el botón principal está activado
+    private bool memoryModeEnabled = false;
     private float visibleTime = 2f;
     private float hiddenTime = 3f;
 
@@ -80,21 +82,9 @@ public class MemoryModeSystem : MonoBehaviour
         // Actualizar displays iniciales
         UpdateDisplays();
 
-        // Ocultar panel de control y círculo inicialmente
+        // Ocultar panel de control inicialmente
         if (memoryControlPanel != null)
             memoryControlPanel.SetActive(false);
-
-        if (memoryCircle != null)
-        {
-            memoryCircle.SetActive(false);
-
-            // Asegurarse de que tenga el detector
-            MemoryCircleDetector detector = memoryCircle.GetComponent<MemoryCircleDetector>();
-            if (detector == null)
-            {
-                detector = memoryCircle.AddComponent<MemoryCircleDetector>();
-            }
-        }
     }
 
     void SetupButtons()
@@ -102,6 +92,10 @@ public class MemoryModeSystem : MonoBehaviour
         // Botón principal
         if (memoryModeMainButton != null)
             memoryModeMainButton.onClick.AddListener(ToggleMemoryMode);
+
+        // Botón de activación directa
+        if (activateMemoryButton != null)
+            activateMemoryButton.onClick.AddListener(ActivateMemoryDirect);
 
         // Botones de tiempo visible
         if (visiblePlusButton != null)
@@ -123,7 +117,6 @@ public class MemoryModeSystem : MonoBehaviour
         visibleTime = Mathf.Clamp(visibleTime + delta, minTime, maxTime);
         UpdateDisplays();
 
-        // Si el modo está activo, actualizar los controladores
         if (memoryModeActive)
         {
             UpdateAllCubeControllers();
@@ -135,7 +128,6 @@ public class MemoryModeSystem : MonoBehaviour
         hiddenTime = Mathf.Clamp(hiddenTime + delta, minTime, maxTime);
         UpdateDisplays();
 
-        // Si el modo está activo, actualizar los controladores
         if (memoryModeActive)
         {
             UpdateAllCubeControllers();
@@ -151,9 +143,11 @@ public class MemoryModeSystem : MonoBehaviour
             hiddenTimeText.text = $"{hiddenTime:F1}s";
 
         if (memoryModeMainButtonText != null)
-            memoryModeMainButtonText.text = memoryModeActive ? "Desactivar Memoria" : "Activar Memoria";
+            memoryModeMainButtonText.text = memoryModeEnabled ? "Desactivar memoria" : "Activar memoria";
 
-        // Cambiar color del botón principal según estado
+        if (activateButtonText != null)
+            activateButtonText.text = memoryModeActive ? "Detener" : "Iniciar";
+
         UpdateButtonColor();
     }
 
@@ -164,15 +158,30 @@ public class MemoryModeSystem : MonoBehaviour
             Image buttonImage = memoryModeMainButton.GetComponent<Image>();
             if (buttonImage != null)
             {
-                if (memoryModeActive)
+                if (memoryModeEnabled)
                 {
-                    // Color cuando está activo (similar al de pistas activas)
-                    buttonImage.color = HexToColor("B03000"); // Rojo oscuro
+                    buttonImage.color = HexToColor("008A06"); // Rojo oscuro
                 }
                 else
                 {
-                    // Color cuando está inactivo (similar al de pistas inactivas)
-                    buttonImage.color = HexToColor("85A5DB"); // Azul claro
+                    buttonImage.color = HexToColor("58DB5E"); // Azul claro
+                }
+            }
+        }
+        if (activateMemoryButton != null)
+        {
+            Image buttonImage = activateMemoryButton.GetComponent<Image>();
+            if (buttonImage != null)
+            {
+                if (memoryModeActive)
+                {
+                    // Color rojo cuando el modo está activo (el botón dirá "Detener")
+                    buttonImage.color = HexToColor("0040B0"); // Un rojo para indicar "detener"
+                }
+                else
+                {
+                    // Color azul/verde cuando está inactivo (el botón dirá "Iniciar")
+                    buttonImage.color = HexToColor("85A5DB"); // Un azul para indicar "iniciar"
                 }
             }
         }
@@ -193,23 +202,18 @@ public class MemoryModeSystem : MonoBehaviour
 
         if (memoryModeEnabled)
         {
-            // IMPORTANTE: Si las pistas están activas, desactivarlas
+            // Si las pistas están activas, desactivarlas
             if (hintSystem != null && hintSystem.AreHintsEnabled())
             {
                 Debug.Log("Desactivando pistas para habilitar modo memoria");
                 hintSystem.ForceDisableHints();
             }
 
-            // Mostrar panel de control y círculo (pero NO activar el modo aún)
+            // Mostrar panel de control
             if (memoryControlPanel != null)
                 memoryControlPanel.SetActive(true);
 
-            if (memoryCircle != null)
-            {
-                memoryCircle.SetActive(true);
-            }
-
-            UpdateDebugInfo("Modo memoria habilitado - toca el círculo para activar");
+            UpdateDebugInfo("Modo memoria habilitado - usa el botón Iniciar");
         }
         else
         {
@@ -220,9 +224,6 @@ public class MemoryModeSystem : MonoBehaviour
             if (memoryControlPanel != null)
                 memoryControlPanel.SetActive(false);
 
-            if (memoryCircle != null)
-                memoryCircle.SetActive(false);
-
             StopMemoryMode();
         }
 
@@ -230,41 +231,144 @@ public class MemoryModeSystem : MonoBehaviour
         Debug.Log($"Modo Memoria Habilitado: {memoryModeEnabled}");
     }
 
-    /// <summary>
-    /// Método llamado cuando se toca el círculo para activar el modo memoria
-    /// </summary>
-    public void ActivateMemoryModeFromCircle()
+    public void ActivateMemoryDirect()
     {
-        if (memoryModeEnabled && !memoryModeActive)
+        if (!memoryModeEnabled)
         {
-            memoryModeActive = true;
-            StartMemoryMode();
-            UpdateDebugInfo("Modo memoria ACTIVADO por toque del círculo");
+            Debug.LogWarning("Primero debes habilitar el modo memoria");
+            return;
+        }
 
-            // Opcionalmente, hacer que el círculo cambie de color o tenga feedback visual
-            if (memoryCircle != null)
+        // Toggle entre activar y desactivar
+        if (memoryModeActive)
+        {
+            memoryModeActive = false;
+            StopMemoryMode();
+            UpdateDebugInfo("Modo memoria DETENIDO");
+        }
+        else
+        {
+            // Verificar si hay cubos, si no, generar el juego primero
+            GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+
+            if (cubes.Length == 0)
             {
-                Renderer circleRenderer = memoryCircle.GetComponent<Renderer>();
-                if (circleRenderer != null)
+                UpdateDebugInfo("No hay cubos - generando juego");
+
+                // Verificar si hay un puzzle seleccionado
+                GameObject curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
+                if (curvedBackground != null)
                 {
-                    // Cambiar a verde o color de activado
-                    circleRenderer.material.color = Color.green;
+                    Image bgImage = curvedBackground.GetComponent<Image>();
+                    if (bgImage != null && bgImage.sprite != null)
+                    {
+                        // Hay un puzzle seleccionado, generar el juego
+                        if (gameGenerator != null)
+                        {
+                            gameGenerator.GenerateGame();
+                            StartCoroutine(ActivateMemoryAfterGeneration());
+                        }
+                    }
+                    else
+                    {
+                        // No hay puzzle seleccionado, seleccionar uno aleatorio
+                        SelectRandomPuzzle();
+                        StartCoroutine(GenerateAndActivateMemory());
+                    }
+                }
+                else
+                {
+                    UpdateDebugInfo("ERROR: No se encontró curvedBackground");
+                }
+            }
+            else
+            {
+                memoryModeActive = true;
+                StartMemoryMode();
+                UpdateDebugInfo("Modo memoria ACTIVADO");
+            }
+        }
+
+        UpdateDisplays();
+    }
+
+    void SelectRandomPuzzle()
+    {
+        // Buscar todos los toggles de puzzles
+        Toggle[] puzzleToggles = FindObjectsOfType<Toggle>();
+        List<Toggle> validToggles = new List<Toggle>();
+
+        foreach (Toggle toggle in puzzleToggles)
+        {
+            // Verificar si es un toggle de puzzle (tiene una imagen)
+            Transform contentTransform = toggle.transform.Find("Content");
+            if (contentTransform != null)
+            {
+                Transform backgroundTransform = contentTransform.Find("Background");
+                if (backgroundTransform != null)
+                {
+                    Image img = backgroundTransform.GetComponent<Image>();
+                    if (img != null && img.sprite != null)
+                    {
+                        validToggles.Add(toggle);
+                    }
                 }
             }
         }
+
+        if (validToggles.Count > 0)
+        {
+            // Seleccionar uno aleatorio
+            Toggle randomToggle = validToggles[Random.Range(0, validToggles.Count)];
+            randomToggle.isOn = true;
+            UpdateDebugInfo($"Puzzle aleatorio seleccionado: {randomToggle.name}");
+        }
+        else
+        {
+            UpdateDebugInfo("ERROR: No se encontraron puzzles disponibles");
+        }
     }
 
-    /// <summary>
-    /// Verifica si se puede activar el modo desde el círculo
-    /// </summary>
-    public bool CanActivateFromCircle()
+    IEnumerator GenerateAndActivateMemory()
     {
-        return memoryModeEnabled && !memoryModeActive;
+        yield return new WaitForSeconds(0.2f); // Esperar a que se seleccione el puzzle
+
+        if (gameGenerator != null)
+        {
+            gameGenerator.GenerateGame();
+            yield return new WaitForSeconds(0.5f);
+
+            GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+            if (cubes.Length > 0)
+            {
+                memoryModeActive = true;
+                StartMemoryMode();
+                UpdateDebugInfo($"Puzzle aleatorio generado y modo memoria activado con {cubes.Length} cubos");
+            }
+        }
+
+        UpdateDisplays();
     }
 
-    /// <summary>
-    /// Método público para actualizar debug desde el detector del círculo
-    /// </summary>
+    IEnumerator ActivateMemoryAfterGeneration()
+    {
+        yield return new WaitForSeconds(0.5f);
+
+        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+        if (cubes.Length > 0)
+        {
+            memoryModeActive = true;
+            StartMemoryMode();
+            UpdateDebugInfo($"Juego generado y modo memoria activado con {cubes.Length} cubos");
+        }
+        else
+        {
+            UpdateDebugInfo("ERROR: No se pudieron generar los cubos");
+        }
+
+        UpdateDisplays();
+    }
+
     public void UpdateDebugInfo(string message)
     {
         if (gameGenerator != null)
@@ -277,7 +381,6 @@ public class MemoryModeSystem : MonoBehaviour
         }
     }
 
-    // Método público para que HintSystem pueda desactivar el modo memoria
     public void ForceDisableMemoryMode()
     {
         if (memoryModeEnabled || memoryModeActive)
@@ -287,9 +390,6 @@ public class MemoryModeSystem : MonoBehaviour
 
             if (memoryControlPanel != null)
                 memoryControlPanel.SetActive(false);
-
-            if (memoryCircle != null)
-                memoryCircle.SetActive(false);
 
             StopMemoryMode();
             UpdateDisplays();
@@ -305,10 +405,8 @@ public class MemoryModeSystem : MonoBehaviour
 
     void StartMemoryMode()
     {
-        // Limpiar controladores anteriores
         StopAllCubeControllers();
 
-        // Buscar todos los cubos
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
 
         if (cubes.Length == 0)
@@ -319,24 +417,20 @@ public class MemoryModeSystem : MonoBehaviour
 
         foreach (GameObject cube in cubes)
         {
-            // Guardar materiales originales
             SaveOriginalMaterials(cube);
 
-            // Crear controlador para cada cubo
             CubeMemoryController controller = cube.GetComponent<CubeMemoryController>();
             if (controller == null)
             {
                 controller = cube.AddComponent<CubeMemoryController>();
             }
 
-            // Configurar el controlador con tiempos aleatorios desincronizados
             float randomOffset = Random.Range(0f, visibleTime + hiddenTime);
             controller.Initialize(visibleTime, hiddenTime, randomOffset, grayMaterial);
 
             cubeControllers[cube] = controller;
         }
 
-        // Notificar al GameGenerator si es necesario
         if (gameGenerator != null)
         {
             gameGenerator.UpdateDebugInfo($"Modo Memoria iniciado con {cubes.Length} cubos");
@@ -412,7 +506,6 @@ public class MemoryModeSystem : MonoBehaviour
         originalCubeMaterials.Clear();
     }
 
-    // Llamar cuando se cambie de puzzle o se reinicie
     public void OnPuzzleChanged()
     {
         if (memoryModeActive)
@@ -445,21 +538,17 @@ public class CubeMemoryController : MonoBehaviour
         hiddenTime = hidden;
         grayMaterial = gray;
 
-        // Guardar materiales originales
         SaveOriginalMaterials();
 
-        // Determinar estado inicial basado en offset
         float cycleTime = visible + hidden;
         float offsetInCycle = startOffset % cycleTime;
         isVisible = offsetInCycle < visible;
 
-        // Aplicar estado inicial
         if (!isVisible)
         {
             ApplyGrayMaterial();
         }
 
-        // Iniciar ciclo con el tiempo restante del estado actual
         float remainingTime = isVisible ?
             (visible - offsetInCycle) :
             (cycleTime - offsetInCycle);
@@ -484,25 +573,19 @@ public class CubeMemoryController : MonoBehaviour
 
     IEnumerator MemoryCycle(float initialWait)
     {
-        // Esperar el tiempo inicial basado en el offset
         yield return new WaitForSeconds(initialWait);
-
-        // Cambiar al siguiente estado
         isVisible = !isVisible;
 
-        // Ciclo continuo
         while (true)
         {
             if (isVisible)
             {
-                // Mostrar contenido original
                 RestoreOriginalMaterials();
                 yield return new WaitForSeconds(visibleTime);
                 isVisible = false;
             }
             else
             {
-                // Ocultar con material gris
                 ApplyGrayMaterial();
                 yield return new WaitForSeconds(hiddenTime);
                 isVisible = true;
@@ -515,7 +598,8 @@ public class CubeMemoryController : MonoBehaviour
         Renderer[] renderers = GetComponentsInChildren<Renderer>();
         foreach (Renderer renderer in renderers)
         {
-            if (grayMaterial != null)
+            // Solo aplicar gris a las caras incorrectas (no a Face1)
+            if (renderer.name != "Face1" && grayMaterial != null)
             {
                 renderer.material = grayMaterial;
             }
@@ -541,8 +625,6 @@ public class CubeMemoryController : MonoBehaviour
             StopCoroutine(memoryCoroutine);
             memoryCoroutine = null;
         }
-
-        // Restaurar materiales originales al detener
         RestoreOriginalMaterials();
     }
 

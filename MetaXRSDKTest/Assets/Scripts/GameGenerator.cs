@@ -495,7 +495,7 @@ public class GameGenerator : MonoBehaviour
         CheckPuzzleCompletion();
     }
 
-    void GenerateGame()
+    public void GenerateGame()
     {
         placedCubesCount = 0;
         currentAttempts = 0;
