@@ -301,6 +301,8 @@ public class MemoryModeSystem : MonoBehaviour
 
     public void ActivateMemoryDirect()
     {
+        gameGenerator.CloseResultPanel();
+
         if (!memoryModeEnabled)
         {
             Debug.LogWarning("Primero debes habilitar el modo memoria");

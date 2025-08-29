@@ -254,7 +254,12 @@ public class GameGenerator : MonoBehaviour
 
         continueButton.onClick.RemoveAllListeners();
         restartButton.onClick.RemoveAllListeners();
+
+        // SIEMPRE configurar el botón de reiniciar para reiniciar el juego
         restartButton.onClick.AddListener(RestartGame);
+        var restartButtonText = restartButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (restartButtonText != null)
+            restartButtonText.text = "Reiniciar";
 
         if (isSuccess)
         {
@@ -303,20 +308,14 @@ public class GameGenerator : MonoBehaviour
         }
         else
         {
-            // CORRECCIÓN: Configurar correctamente el panel de error
+            // Panel de error/fallo
             string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
             resultMessageText.text = $"No has completado el puzle correctamente. Llevas {attemptText}. ¿Quieres seguir intentándolo?";
 
-            // CORRECCIÓN: El botón de continuar debe decir "Reintentar" en caso de error
             var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
             if (continueButtonText != null)
                 continueButtonText.text = "Reintentar";
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
-
-            // El botón de reiniciar mantiene su texto normal
-            var restartButtonText = restartButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (restartButtonText != null)
-                restartButtonText.text = "Reiniciar";
         }
     }
 
@@ -390,7 +389,7 @@ public class GameGenerator : MonoBehaviour
     /// </summary>
     public void ShowMemoryModeStoppedPanel()
     {
-        if (resultAlreadyShown) return;
+        // NO verificar resultAlreadyShown aquí porque este es un panel especial del modo memoria
 
         resultPanel.SetActive(true);
 
@@ -405,7 +404,7 @@ public class GameGenerator : MonoBehaviour
         continueButton.onClick.RemoveAllListeners();
         continueButton.onClick.AddListener(ContinueWithoutMemoryMode);
 
-        // Configurar botón de reiniciar como "Siguiente puzzle"
+        // Configurar botón de siguiente puzzle
         var restartButtonText = restartButton.GetComponentInChildren<TextMeshProUGUI>();
         if (restartButtonText != null)
             restartButtonText.text = "Siguiente puzzle";
@@ -416,6 +415,9 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo("Panel de modo memoria detenido mostrado");
     }
 
+    /// <summary>
+    /// Continuar resolviendo el puzzle sin modo memoria
+    /// </summary>
     /// <summary>
     /// Continuar resolviendo el puzzle sin modo memoria
     /// </summary>
@@ -533,7 +535,7 @@ public class GameGenerator : MonoBehaviour
         timeAlreadySaved = false;
         currentAttempts = 0;
 
-        // IMPORTANTE: Verificar si el modo memoria está activo ANTES de limpiar
+        // Verificar si el modo memoria está activo ANTES de limpiar
         MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
         bool wasMemoryModeActive = false;
         if (memorySystem != null && memorySystem.IsMemoryModeActive())
@@ -560,7 +562,7 @@ public class GameGenerator : MonoBehaviour
 
         GenerateGame();
 
-        // NUEVO: Si el modo memoria estaba activo, reactivarlo después de generar
+        // Si el modo memoria estaba activo, reactivarlo después de generar
         if (wasMemoryModeActive && memorySystem != null)
         {
             StartCoroutine(ReactivateMemoryAfterDelay(memorySystem));
@@ -577,7 +579,7 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo("Juego reiniciado" + (wasMemoryModeActive ? " - Modo memoria se reactivará" : ""));
     }
 
-    // Nuevo método para reactivar memoria después de regenerar
+    // Coroutine para reactivar memoria después de regenerar
     private IEnumerator ReactivateMemoryAfterDelay(MemoryModeSystem memorySystem)
     {
         yield return new WaitForSeconds(0.5f); // Esperar a que se generen los cubos
