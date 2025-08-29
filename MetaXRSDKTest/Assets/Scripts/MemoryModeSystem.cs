@@ -254,7 +254,11 @@ public class MemoryModeSystem : MonoBehaviour
         Debug.Log($"Modo Memoria Habilitado: {memoryModeEnabled}");
     }
 
-    // <summary>
+    // Reemplaza el método OnGridSizeChanged en MemoryModeSystem.cs con esta versión mejorada:
+
+    // Reemplaza el método OnGridSizeChanged en MemoryModeSystem.cs con esta versión mejorada:
+
+    /// <summary>
     /// Método llamado cuando cambia el tamaño del grid
     /// </summary>
     public void OnGridSizeChanged(int newRows, int newColumns)
@@ -293,6 +297,7 @@ public class MemoryModeSystem : MonoBehaviour
         }
     }
 
+    // También actualiza el método ActivateMemoryDirect para manejar mejor la regeneración:
 
     public void ActivateMemoryDirect()
     {
@@ -307,7 +312,15 @@ public class MemoryModeSystem : MonoBehaviour
         {
             memoryModeActive = false;
             StopMemoryMode();
-            UpdateDebugInfo("Modo memoria DETENIDO");
+
+            // Mostrar panel de resultado con mensaje específico
+            if (gameGenerator != null)
+            {
+                gameGenerator.PauseTimer();
+                gameGenerator.ShowMemoryModeStoppedPanel();
+            }
+
+            UpdateDebugInfo("Modo memoria DETENIDO - Mostrando panel de decisión");
         }
         else
         {
@@ -391,13 +404,82 @@ public class MemoryModeSystem : MonoBehaviour
                 // Los cubos existen y coinciden con el grid
                 memoryModeActive = true;
                 StartMemoryMode();
-                UpdateDebugInfo($"Modo memoria ACTIVADO con {cubes.Length} cubos (grid {currentRows}x{currentColumns})");
+
+                // NUEVO: Reanudar el contador de tiempo
+                if (gameGenerator != null)
+                {
+                    gameGenerator.ResumeTimer();
+                }
+
+                UpdateDebugInfo($"Modo memoria ACTIVADO con {cubes.Length} cubos (grid {currentRows}x{currentColumns}) - Timer reanudado");
             }
         }
 
         UpdateDisplays();
     }
+    /// <summary>
+    /// Verifica si el modo memoria está actualmente activo (no solo habilitado)
+    /// </summary>
+    public bool IsMemoryModeActive()
+    {
+        return memoryModeActive;
+    }
 
+    /// <summary>
+    /// Desactiva temporalmente el modo memoria para regeneración pero mantiene el estado para reactivarlo
+    /// </summary>
+    public void TemporarilyDisableForRegeneration()
+    {
+        if (memoryModeActive)
+        {
+            // Detener el modo memoria pero mantener el estado de habilitado
+            StopMemoryMode();
+            // NO cambiar memoryModeActive aquí, lo mantenemos true para saber que debe reactivarse
+            UpdateDebugInfo("Modo memoria temporalmente desactivado para regeneración");
+        }
+    }
+
+    /// <summary>
+    /// Reactiva el modo memoria después de regenerar el puzzle
+    /// </summary>
+    public void ReactivateAfterRegeneration()
+    {
+        if (memoryModeEnabled && memoryModeActive)
+        {
+            // Reactivar el modo memoria con los nuevos cubos
+            GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+            if (cubes.Length > 0)
+            {
+                StartMemoryMode();
+
+                // Asegurar que el timer esté corriendo
+                if (gameGenerator != null)
+                {
+                    gameGenerator.ResumeTimer();
+                }
+
+                UpdateDebugInfo($"Modo memoria reactivado con {cubes.Length} cubos");
+                UpdateDisplays();
+            }
+            else
+            {
+                UpdateDebugInfo("ERROR: No hay cubos para reactivar el modo memoria");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mantiene el modo memoria activo cuando se continúa el juego
+    /// </summary>
+    public void MaintainMemoryModeState()
+    {
+        if (memoryModeActive)
+        {
+            // Actualizar todos los controladores existentes con los tiempos actuales
+            UpdateAllCubeControllers();
+            UpdateDebugInfo("Estado del modo memoria mantenido");
+        }
+    }
     /// <summary>
     /// NUEVO: Regenera los cubos con el nuevo tamaño de grid
     /// </summary>
@@ -689,6 +771,8 @@ public class MemoryModeSystem : MonoBehaviour
 /// <summary>
 /// Controlador individual para cada cubo en modo memoria
 /// </summary>
+// Añade estas modificaciones al CubeMemoryController al final del archivo MemoryModeSystem.cs
+
 public class CubeMemoryController : MonoBehaviour
 {
     private float visibleTime;
@@ -699,10 +783,12 @@ public class CubeMemoryController : MonoBehaviour
     private Coroutine memoryCoroutine;
 
     // NUEVO: Variables para el haz de luz
+    private GameObject lightBeamObject;
     private LineRenderer lightBeam;
     private Vector3 targetMagnetPosition;
     private bool hasLightBeam = false;
     private Material lightBeamMaterial;
+    private Color beamColor;
 
     public void Initialize(float visible, float hidden, float startOffset, Material gray)
     {
@@ -747,28 +833,38 @@ public class CubeMemoryController : MonoBehaviour
                 {
                     targetMagnetPosition = gameGen.GetMagnetPosition(row, col);
 
+                    // Crear un GameObject separado para el haz (así no se ve afectado por los materiales del cubo)
+                    lightBeamObject = new GameObject($"LightBeam_{gameObject.name}");
+                    lightBeamObject.transform.SetParent(transform.parent); // Padre del cubo, no el cubo mismo
+
                     // Crear el LineRenderer
-                    lightBeam = gameObject.AddComponent<LineRenderer>();
+                    lightBeam = lightBeamObject.AddComponent<LineRenderer>();
+
+                    // Generar un color único para este cubo basado en su posición
+                    beamColor = GenerateUniqueColor(row, col, gameGen.rows, gameGen.columns);
 
                     // Configurar el material del haz
                     CreateLightBeamMaterial();
                     lightBeam.material = lightBeamMaterial;
 
                     // Configurar propiedades del LineRenderer
-                    lightBeam.startWidth = 0.005f; // Ancho inicial del haz
-                    lightBeam.endWidth = 0.002f;   // Ancho final (más delgado)
-                    lightBeam.positionCount = 2;
+                    lightBeam.startWidth = 0.01f;  // Haz más visible
+                    lightBeam.endWidth = 0.005f;
 
-                    // Configurar el gradiente de color
+                    // Usar más puntos para crear una curva suave
+                    int curveSegments = 20;
+                    lightBeam.positionCount = curveSegments;
+
+                    // Configurar el gradiente de color con el color único
                     Gradient gradient = new Gradient();
                     gradient.SetKeys(
                         new GradientColorKey[] {
-                            new GradientColorKey(new Color(0.5f, 1f, 1f, 1f), 0.0f),  // Cyan claro
-                            new GradientColorKey(new Color(0f, 0.8f, 1f, 1f), 1.0f)    // Azul brillante
+                            new GradientColorKey(beamColor, 0.0f),
+                            new GradientColorKey(beamColor * 0.7f, 1.0f) // Más oscuro al final
                         },
                         new GradientAlphaKey[] {
-                            new GradientAlphaKey(0.8f, 0.0f),  // Semi-transparente al inicio
-                            new GradientAlphaKey(0.3f, 1.0f)   // Más transparente al final
+                            new GradientAlphaKey(1f, 0.0f),   // Opaco al inicio
+                            new GradientAlphaKey(0.6f, 1.0f)  // Semi-transparente al final
                         }
                     );
                     lightBeam.colorGradient = gradient;
@@ -780,52 +876,76 @@ public class CubeMemoryController : MonoBehaviour
                     lightBeam.numCapVertices = 5;
                     lightBeam.numCornerVertices = 5;
 
+                    // Establecer la curva inicial del haz
+                    UpdateBeamCurve();
+
                     hasLightBeam = true;
 
-                    Debug.Log($"Haz de luz configurado para {gameObject.name} hacia posición {targetMagnetPosition}");
+                    Debug.Log($"Haz de luz configurado para {gameObject.name} con color RGB({beamColor.r:F2}, {beamColor.g:F2}, {beamColor.b:F2})");
                 }
             }
         }
     }
-    // Opción 1: Haz con animación de energía (reemplazar el método Update)
-    void Update()
+
+    // NUEVO: Generar un color único basado en la posición del cubo
+    Color GenerateUniqueColor(int row, int col, int totalRows, int totalCols)
     {
-        if (hasLightBeam && lightBeam != null)
+        // Calcular un índice único para este cubo
+        float normalizedIndex = (row * totalCols + col) / (float)(totalRows * totalCols);
+
+        // Usar HSV para generar colores bien distribuidos
+        float hue = normalizedIndex; // 0 a 1 en el espectro de colores
+        float saturation = 0.8f; // Alta saturación para colores vivos
+        float value = 0.9f; // Alto brillo
+
+        return Color.HSVToRGB(hue, saturation, value);
+    }
+
+    // NUEVO: Actualizar la curva del haz
+    void UpdateBeamCurve()
+    {
+        if (!hasLightBeam || lightBeam == null) return;
+
+        Vector3 cubeCenter = transform.position;
+        int segments = lightBeam.positionCount;
+
+        // Calcular la dirección y distancia
+        Vector3 direction = (targetMagnetPosition - cubeCenter).normalized;
+        float distance = Vector3.Distance(cubeCenter, targetMagnetPosition);
+
+        // Vector perpendicular para las ondas (perpendicular a la dirección del haz)
+        Vector3 perpendicular = Vector3.Cross(direction, Vector3.up).normalized;
+        // Si el haz es muy vertical, usar otro vector
+        if (Mathf.Abs(direction.y) > 0.9f)
         {
-            Vector3 cubeCenter = transform.position;
+            perpendicular = Vector3.Cross(direction, Vector3.forward).normalized;
+        }
 
-            // Crear un efecto de onda en el haz
-            int segments = 20;
-            lightBeam.positionCount = segments;
+        for (int i = 0; i < segments; i++)
+        {
+            float t = i / (float)(segments - 1);
 
-            for (int i = 0; i < segments; i++)
+            // Interpolación lineal entre el cubo y el imán
+            Vector3 point = Vector3.Lerp(cubeCenter, targetMagnetPosition, t);
+
+            // Añadir ondas laterales estáticas (sin Time.time para que no se muevan)
+            if (i > 0 && i < segments - 1) // No ondular en los extremos
             {
-                float t = i / (float)(segments - 1);
-                Vector3 point = Vector3.Lerp(cubeCenter, targetMagnetPosition, t);
-
-                // Añadir una onda sinusoidal perpendicular a la dirección
-                if (i > 0 && i < segments - 1)
-                {
-                    float wave = Mathf.Sin(t * Mathf.PI * 4 + Time.time * 5) * 0.01f;
-                    Vector3 perpendicular = Vector3.Cross(targetMagnetPosition - cubeCenter, Vector3.up).normalized;
-                    point += perpendicular * wave;
-                }
-
-                lightBeam.SetPosition(i, point);
+                // Crear 2-3 ondas a lo largo del haz
+                float waveAmplitude = 0.015f * (1f - t * 0.5f); // Onda más pequeña hacia el final
+                float wave = Mathf.Sin(t * Mathf.PI * 3) * waveAmplitude;
+                point += perpendicular * wave;
             }
 
-            // Pulso de intensidad
-            float pulse = 0.8f + Mathf.Sin(Time.time * 3f) * 0.2f;
-            lightBeam.startWidth = 0.008f * pulse;
-            lightBeam.endWidth = 0.003f * pulse;
+            lightBeam.SetPosition(i, point);
         }
     }
 
-    // NUEVO: Crear material emisivo para el haz
+    // NUEVO: Crear material emisivo para el haz con el color específico
     void CreateLightBeamMaterial()
     {
         lightBeamMaterial = new Material(Shader.Find("Sprites/Default"));
-        lightBeamMaterial.color = new Color(0.3f, 0.8f, 1f, 0.5f); // Azul cyan semi-transparente
+        lightBeamMaterial.color = new Color(beamColor.r, beamColor.g, beamColor.b, 0.8f);
 
         // Si es posible usar un shader con emisión
         if (Shader.Find("Standard") != null)
@@ -840,9 +960,23 @@ public class CubeMemoryController : MonoBehaviour
             lightBeamMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             lightBeamMaterial.renderQueue = 3000;
 
-            lightBeamMaterial.color = new Color(0.3f, 0.8f, 1f, 0.3f);
+            lightBeamMaterial.color = new Color(beamColor.r, beamColor.g, beamColor.b, 0.8f);
             lightBeamMaterial.EnableKeyword("_EMISSION");
-            lightBeamMaterial.SetColor("_EmissionColor", new Color(0.3f, 0.8f, 1f) * 0.5f);
+            lightBeamMaterial.SetColor("_EmissionColor", beamColor * 0.5f);
+        }
+    }
+
+    // MODIFICADO: Update solo actualiza si el cubo se mueve, sin animación
+    void Update()
+    {
+        if (hasLightBeam && lightBeam != null && lightBeamObject != null)
+        {
+            // Solo actualizar si el cubo se ha movido significativamente
+            Vector3 currentCubePos = transform.position;
+            if (Vector3.Distance(currentCubePos, lightBeam.GetPosition(0)) > 0.01f)
+            {
+                UpdateBeamCurve();
+            }
         }
     }
 
@@ -916,9 +1050,10 @@ public class CubeMemoryController : MonoBehaviour
         }
 
         // NUEVO: Limpiar el haz de luz
-        if (lightBeam != null)
+        if (lightBeamObject != null)
         {
-            Destroy(lightBeam);
+            Destroy(lightBeamObject);
+            lightBeamObject = null;
             lightBeam = null;
         }
 
