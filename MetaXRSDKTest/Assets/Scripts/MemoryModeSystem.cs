@@ -49,7 +49,6 @@ public class MemoryModeSystem : MonoBehaviour
     [Header("Material Gris para Ocultar")]
     public Material grayMaterial;
 
-    // Añade estas variables al principio de la clase MemoryModeSystem si no las tienes:
     [Header("Configuración de Grid Aleatorio")]
     [Tooltip("Tamaño mínimo del grid aleatorio")]
     public int minGridSize = 2;
@@ -59,10 +58,11 @@ public class MemoryModeSystem : MonoBehaviour
     // Estado interno
     private bool memoryModeActive = false;
     private bool memoryModeEnabled = false;
+    private bool memoryModePaused = false;  // NUEVO: Estado de pausa
     private float visibleTime = 2f;
     private float hiddenTime = 3f;
 
-    // NUEVO: Variables para recordar el tamaño del grid actual
+    // Variables para recordar el tamaño del grid actual
     private int currentRows = 0;
     private int currentColumns = 0;
     private bool needsRegeneration = false;
@@ -254,13 +254,6 @@ public class MemoryModeSystem : MonoBehaviour
         Debug.Log($"Modo Memoria Habilitado: {memoryModeEnabled}");
     }
 
-    // Reemplaza el método OnGridSizeChanged en MemoryModeSystem.cs con esta versión mejorada:
-
-    // Reemplaza el método OnGridSizeChanged en MemoryModeSystem.cs con esta versión mejorada:
-
-    /// <summary>
-    /// Método llamado cuando cambia el tamaño del grid
-    /// </summary>
     public void OnGridSizeChanged(int newRows, int newColumns)
     {
         UpdateDebugInfo($"Grid cambió de {currentRows}x{currentColumns} a {newRows}x{newColumns}");
@@ -297,10 +290,51 @@ public class MemoryModeSystem : MonoBehaviour
         }
     }
 
-    // También actualiza el método ActivateMemoryDirect para manejar mejor la regeneración:
+
+    // Agregar estos métodos en MemoryModeSystem.cs (después de los otros métodos públicos):
+
+    /// <summary>
+    /// Verifica si el modo memoria está actualmente activo (no solo habilitado)
+    /// </summary>
+    public bool IsMemoryModeActive()
+    {
+        return memoryModeActive;  // Retorna true si está activo, sin importar si está pausado
+    }
+
+    /// <summary>
+    /// Verifica si el modo memoria está pausado
+    /// </summary>
+    public bool IsMemoryModePaused()
+    {
+        return memoryModeActive && memoryModePaused;
+    }
+
+    /// <summary>
+    /// Verifica si el modo memoria está activo Y funcionando (no pausado)
+    /// </summary>
+    public bool IsMemoryModeRunning()
+    {
+        return memoryModeActive && !memoryModePaused;
+    }
+    // Y actualizar el método ActivateMemoryDirect para la lógica del botón Detener:
 
     public void ActivateMemoryDirect()
     {
+        // NUEVO: Si hay un panel de resultado activo, simplemente cerrar sin mostrar nada
+        if (gameGenerator != null && gameGenerator.IsResultPanelActive())
+        {
+            // Si intentamos detener el modo memoria con un panel activo, solo detenerlo sin mostrar nada
+            if (memoryModeActive)
+            {
+                memoryModeActive = false;
+                memoryModePaused = false; // Asegurarse de limpiar el estado de pausa
+                StopMemoryMode();
+                UpdateDebugInfo("Modo memoria DETENIDO - Panel de resultado activo, no se muestra panel adicional");
+                UpdateDisplays();
+                return;
+            }
+        }
+
         gameGenerator.CloseResultPanel();
 
         if (!memoryModeEnabled)
@@ -313,16 +347,25 @@ public class MemoryModeSystem : MonoBehaviour
         if (memoryModeActive)
         {
             memoryModeActive = false;
+            memoryModePaused = false; // Limpiar estado de pausa al detener
             StopMemoryMode();
 
-            // Mostrar panel de resultado con mensaje específico
+            // IMPORTANTE: Verificar si el panel de resultado ya está activo
             if (gameGenerator != null)
             {
                 gameGenerator.PauseTimer();
-                gameGenerator.ShowMemoryModeStoppedPanel();
-            }
 
-            UpdateDebugInfo("Modo memoria DETENIDO - Mostrando panel de decisión");
+                // Solo mostrar el panel de modo memoria si NO hay otro panel activo
+                if (!gameGenerator.IsResultPanelActive())
+                {
+                    gameGenerator.ShowMemoryModeStoppedPanel();
+                    UpdateDebugInfo("Modo memoria DETENIDO - Mostrando panel de decisión");
+                }
+                else
+                {
+                    UpdateDebugInfo("Modo memoria DETENIDO - Panel de resultado ya activo, no se muestra panel adicional");
+                }
+            }
         }
         else
         {
@@ -405,6 +448,7 @@ public class MemoryModeSystem : MonoBehaviour
             {
                 // Los cubos existen y coinciden con el grid
                 memoryModeActive = true;
+                memoryModePaused = false; // Asegurarse de que no está pausado al activar
                 StartMemoryMode();
 
                 // NUEVO: Reanudar el contador de tiempo
@@ -420,12 +464,50 @@ public class MemoryModeSystem : MonoBehaviour
         UpdateDisplays();
     }
     /// <summary>
-    /// Verifica si el modo memoria está actualmente activo (no solo habilitado)
+    /// Pausa el modo memoria manteniendo el estado pero deteniendo los efectos visuales
     /// </summary>
-    public bool IsMemoryModeActive()
+    public void PauseMemoryMode()
     {
-        return memoryModeActive;
+        if (memoryModeActive && !memoryModePaused)
+        {
+            memoryModePaused = true;
+
+            // Pausar todos los controladores de cubos
+            foreach (var kvp in cubeControllers)
+            {
+                if (kvp.Value != null)
+                {
+                    kvp.Value.PauseEffects();
+                }
+            }
+
+            UpdateDebugInfo("Modo memoria PAUSADO - efectos visuales detenidos");
+        }
     }
+
+    /// <summary>
+    /// Reanuda el modo memoria después de una pausa
+    /// </summary>
+    public void UnpauseMemoryMode()
+    {
+        if (memoryModeActive && memoryModePaused)
+        {
+            memoryModePaused = false;
+
+            // Reanudar todos los controladores de cubos
+            foreach (var kvp in cubeControllers)
+            {
+                if (kvp.Value != null)
+                {
+                    kvp.Value.ResumeEffects();
+                }
+            }
+
+            UpdateDebugInfo("Modo memoria REANUDADO - efectos visuales activos");
+        }
+    }
+
+    // Reemplazar estos métodos en MemoryModeSystem.cs:
 
     /// <summary>
     /// Desactiva temporalmente el modo memoria para regeneración pero mantiene el estado para reactivarlo
@@ -434,10 +516,12 @@ public class MemoryModeSystem : MonoBehaviour
     {
         if (memoryModeActive)
         {
-            // Detener el modo memoria pero mantener el estado de habilitado
+            // Detener el modo memoria pero mantener memoryModeActive = true
             StopMemoryMode();
             // NO cambiar memoryModeActive aquí, lo mantenemos true para saber que debe reactivarse
-            UpdateDebugInfo("Modo memoria temporalmente desactivado para regeneración");
+            // memoryModeActive = true; // Mantenerlo activo
+            memoryModePaused = false; // Limpiar el estado de pausa
+            UpdateDebugInfo("Modo memoria temporalmente desactivado para regeneración (mantiene estado activo)");
         }
     }
 
@@ -448,6 +532,8 @@ public class MemoryModeSystem : MonoBehaviour
     {
         if (memoryModeEnabled && memoryModeActive)
         {
+            memoryModePaused = false; // Asegurarse de que no está pausado
+
             // Reactivar el modo memoria con los nuevos cubos
             GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
             if (cubes.Length > 0)
@@ -460,7 +546,7 @@ public class MemoryModeSystem : MonoBehaviour
                     gameGenerator.ResumeTimer();
                 }
 
-                UpdateDebugInfo($"Modo memoria reactivado con {cubes.Length} cubos");
+                UpdateDebugInfo($"Modo memoria reactivado con {cubes.Length} cubos después de regeneración");
                 UpdateDisplays();
             }
             else
@@ -469,22 +555,39 @@ public class MemoryModeSystem : MonoBehaviour
             }
         }
     }
+    /// <summary>
+    /// Reinicia el modo memoria con los cubos actuales (usado después de regenerar el puzzle)
+    /// </summary>
+    public void RestartMemoryModeWithCurrentCubes()
+    {
+        if (memoryModeActive && memoryModeEnabled)
+        {
+            // Limpiar controladores anteriores
+            StopAllCubeControllers();
+            cubeControllers.Clear();
+            originalCubeMaterials.Clear();
 
+            // Despausar si estaba pausado
+            memoryModePaused = false;
+
+            // Iniciar con los nuevos cubos
+            StartMemoryMode();
+
+            UpdateDebugInfo("Modo memoria reiniciado con nuevos cubos");
+        }
+    }
     /// <summary>
     /// Mantiene el modo memoria activo cuando se continúa el juego
     /// </summary>
     public void MaintainMemoryModeState()
     {
-        if (memoryModeActive)
+        if (memoryModeActive && !memoryModePaused)
         {
             // Actualizar todos los controladores existentes con los tiempos actuales
             UpdateAllCubeControllers();
             UpdateDebugInfo("Estado del modo memoria mantenido");
         }
     }
-    /// <summary>
-    /// NUEVO: Regenera los cubos con el nuevo tamaño de grid
-    /// </summary>
     void RegenerateForNewGrid()
     {
         // Limpiar cubos existentes
@@ -513,7 +616,7 @@ public class MemoryModeSystem : MonoBehaviour
             }
         }
     }
-    // Reemplaza el método SelectRandomPuzzle completo con este:
+
     void SelectRandomPuzzle()
     {
         // Primero, establecer un tamaño de grid aleatorio
@@ -639,6 +742,7 @@ public class MemoryModeSystem : MonoBehaviour
         {
             memoryModeEnabled = false;
             memoryModeActive = false;
+            memoryModePaused = false;
             needsRegeneration = false;
 
             if (memoryControlPanel != null)
@@ -658,7 +762,12 @@ public class MemoryModeSystem : MonoBehaviour
 
     void StartMemoryMode()
     {
-        StopAllCubeControllers();
+        // =================================================================
+        // ===================== FIX 1: DELETE THIS LINE ===================
+        // =================================================================
+        // StopAllCubeControllers();   // Esta línea es redundante y potencialmente problemática
+        // =================================================================
+        // =================================================================
 
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
 
@@ -668,6 +777,7 @@ public class MemoryModeSystem : MonoBehaviour
             return;
         }
 
+        // El resto del método se queda igual...
         foreach (GameObject cube in cubes)
         {
             SaveOriginalMaterials(cube);
@@ -773,24 +883,55 @@ public class MemoryModeSystem : MonoBehaviour
 /// <summary>
 /// Controlador individual para cada cubo en modo memoria
 /// </summary>
-// Añade estas modificaciones al CubeMemoryController al final del archivo MemoryModeSystem.cs
-
 public class CubeMemoryController : MonoBehaviour
 {
     private float visibleTime;
     private float hiddenTime;
     private bool isVisible;
+    private bool isPaused = false;  // NUEVO: Estado de pausa
     private Material grayMaterial;
     private Dictionary<string, Material> originalMaterials = new Dictionary<string, Material>();
     private Coroutine memoryCoroutine;
 
-    // NUEVO: Variables para el haz de luz
+    // Variables para el haz de luz
     private GameObject lightBeamObject;
     private LineRenderer lightBeam;
     private Vector3 targetMagnetPosition;
     private bool hasLightBeam = false;
     private Material lightBeamMaterial;
     private Color beamColor;
+
+    // NUEVO: Métodos para pausar y reanudar efectos
+    public void PauseEffects()
+    {
+        isPaused = true;
+
+        // Restaurar materiales originales temporalmente
+        RestoreOriginalMaterials();
+
+        // Ocultar el haz de luz
+        if (lightBeamObject != null)
+        {
+            lightBeamObject.SetActive(false);
+        }
+    }
+
+    public void ResumeEffects()
+    {
+        isPaused = false;
+
+        // Reactivar el haz de luz
+        if (lightBeamObject != null)
+        {
+            lightBeamObject.SetActive(true);
+        }
+
+        // Si el cubo debería estar gris, aplicarlo de nuevo
+        if (!isVisible)
+        {
+            ApplyGrayMaterial();
+        }
+    }
 
     public void Initialize(float visible, float hidden, float startOffset, Material gray)
     {
@@ -800,7 +941,7 @@ public class CubeMemoryController : MonoBehaviour
 
         SaveOriginalMaterials();
 
-        // NUEVO: Configurar el haz de luz
+        // Configurar el haz de luz
         SetupLightBeam();
 
         float cycleTime = visible + hidden;
@@ -819,7 +960,6 @@ public class CubeMemoryController : MonoBehaviour
         memoryCoroutine = StartCoroutine(MemoryCycle(remainingTime));
     }
 
-    // NUEVO: Configurar el LineRenderer para el haz de luz
     void SetupLightBeam()
     {
         // Obtener la posición del imán correspondiente
@@ -837,7 +977,7 @@ public class CubeMemoryController : MonoBehaviour
 
                     // Crear un GameObject separado para el haz (así no se ve afectado por los materiales del cubo)
                     lightBeamObject = new GameObject($"LightBeam_{gameObject.name}");
-                    lightBeamObject.transform.SetParent(transform.parent); // Padre del cubo, no el cubo mismo
+                    lightBeamObject.transform.SetParent(transform.parent);
 
                     // Crear el LineRenderer
                     lightBeam = lightBeamObject.AddComponent<LineRenderer>();
@@ -850,7 +990,7 @@ public class CubeMemoryController : MonoBehaviour
                     lightBeam.material = lightBeamMaterial;
 
                     // Configurar propiedades del LineRenderer
-                    lightBeam.startWidth = 0.01f;  // Haz más visible
+                    lightBeam.startWidth = 0.01f;
                     lightBeam.endWidth = 0.005f;
 
                     // Usar más puntos para crear una curva suave
@@ -862,11 +1002,11 @@ public class CubeMemoryController : MonoBehaviour
                     gradient.SetKeys(
                         new GradientColorKey[] {
                             new GradientColorKey(beamColor, 0.0f),
-                            new GradientColorKey(beamColor * 0.7f, 1.0f) // Más oscuro al final
+                            new GradientColorKey(beamColor * 0.7f, 1.0f)
                         },
                         new GradientAlphaKey[] {
-                            new GradientAlphaKey(1f, 0.0f),   // Opaco al inicio
-                            new GradientAlphaKey(0.6f, 1.0f)  // Semi-transparente al final
+                            new GradientAlphaKey(1f, 0.0f),
+                            new GradientAlphaKey(0.6f, 1.0f)
                         }
                     );
                     lightBeam.colorGradient = gradient;
@@ -889,21 +1029,19 @@ public class CubeMemoryController : MonoBehaviour
         }
     }
 
-    // NUEVO: Generar un color único basado en la posición del cubo
     Color GenerateUniqueColor(int row, int col, int totalRows, int totalCols)
     {
         // Calcular un índice único para este cubo
         float normalizedIndex = (row * totalCols + col) / (float)(totalRows * totalCols);
 
         // Usar HSV para generar colores bien distribuidos
-        float hue = normalizedIndex; // 0 a 1 en el espectro de colores
-        float saturation = 0.8f; // Alta saturación para colores vivos
-        float value = 0.9f; // Alto brillo
+        float hue = normalizedIndex;
+        float saturation = 0.8f;
+        float value = 0.9f;
 
         return Color.HSVToRGB(hue, saturation, value);
     }
 
-    // NUEVO: Actualizar la curva del haz
     void UpdateBeamCurve()
     {
         if (!hasLightBeam || lightBeam == null) return;
@@ -915,9 +1053,8 @@ public class CubeMemoryController : MonoBehaviour
         Vector3 direction = (targetMagnetPosition - cubeCenter).normalized;
         float distance = Vector3.Distance(cubeCenter, targetMagnetPosition);
 
-        // Vector perpendicular para las ondas (perpendicular a la dirección del haz)
+        // Vector perpendicular para las ondas
         Vector3 perpendicular = Vector3.Cross(direction, Vector3.up).normalized;
-        // Si el haz es muy vertical, usar otro vector
         if (Mathf.Abs(direction.y) > 0.9f)
         {
             perpendicular = Vector3.Cross(direction, Vector3.forward).normalized;
@@ -930,11 +1067,10 @@ public class CubeMemoryController : MonoBehaviour
             // Interpolación lineal entre el cubo y el imán
             Vector3 point = Vector3.Lerp(cubeCenter, targetMagnetPosition, t);
 
-            // Añadir ondas laterales estáticas (sin Time.time para que no se muevan)
-            if (i > 0 && i < segments - 1) // No ondular en los extremos
+            // Añadir ondas laterales estáticas
+            if (i > 0 && i < segments - 1)
             {
-                // Crear 2-3 ondas a lo largo del haz
-                float waveAmplitude = 0.015f * (1f - t * 0.5f); // Onda más pequeña hacia el final
+                float waveAmplitude = 0.015f * (1f - t * 0.5f);
                 float wave = Mathf.Sin(t * Mathf.PI * 3) * waveAmplitude;
                 point += perpendicular * wave;
             }
@@ -943,7 +1079,6 @@ public class CubeMemoryController : MonoBehaviour
         }
     }
 
-    // NUEVO: Crear material emisivo para el haz con el color específico
     void CreateLightBeamMaterial()
     {
         lightBeamMaterial = new Material(Shader.Find("Sprites/Default"));
@@ -953,7 +1088,7 @@ public class CubeMemoryController : MonoBehaviour
         if (Shader.Find("Standard") != null)
         {
             lightBeamMaterial = new Material(Shader.Find("Standard"));
-            lightBeamMaterial.SetFloat("_Mode", 3); // Transparent mode
+            lightBeamMaterial.SetFloat("_Mode", 3);
             lightBeamMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             lightBeamMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
             lightBeamMaterial.SetInt("_ZWrite", 0);
@@ -968,7 +1103,6 @@ public class CubeMemoryController : MonoBehaviour
         }
     }
 
-    // MODIFICADO: Update solo actualiza si el cubo se mueve, sin animación
     void Update()
     {
         if (hasLightBeam && lightBeam != null && lightBeamObject != null)
@@ -1004,6 +1138,13 @@ public class CubeMemoryController : MonoBehaviour
 
         while (true)
         {
+            // Si está pausado, mantener el estado actual sin cambios
+            if (isPaused)
+            {
+                yield return new WaitForSeconds(0.1f);
+                continue;
+            }
+
             if (isVisible)
             {
                 RestoreOriginalMaterials();
@@ -1051,7 +1192,7 @@ public class CubeMemoryController : MonoBehaviour
             memoryCoroutine = null;
         }
 
-        // NUEVO: Limpiar el haz de luz
+        // Limpiar el haz de luz
         if (lightBeamObject != null)
         {
             Destroy(lightBeamObject);

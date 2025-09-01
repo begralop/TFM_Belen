@@ -238,6 +238,16 @@ public class GameGenerator : MonoBehaviour
         SceneManager.LoadScene(loginSceneName);
     }
 
+    /// <summary>
+    /// Verifica si el panel de resultado está activo
+    /// </summary>
+    public bool IsResultPanelActive()
+    {
+        return resultPanel != null && resultPanel.activeSelf;
+    }
+
+    // Reemplazar el método ShowResult existente con esta versión:
+
     private void ShowResult(bool isSuccess)
     {
         if (resultAlreadyShown)
@@ -249,6 +259,14 @@ public class GameGenerator : MonoBehaviour
         resultAlreadyShown = true;
         currentAttempts++;
         UpdateDebugInfo($"RESULTADO: Intento {currentAttempts} - {(isSuccess ? "ÉXITO" : "FALLO")}");
+
+        // NUEVO: Pausar el modo memoria si está activo
+        MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+        if (memorySystem != null && memorySystem.IsMemoryModeActive())
+        {
+            memorySystem.PauseMemoryMode();
+            UpdateDebugInfo("Modo memoria pausado mientras se muestra el panel de resultado");
+        }
 
         resultPanel.SetActive(true);
 
@@ -377,19 +395,19 @@ public class GameGenerator : MonoBehaviour
 
         UpdateDebugInfo($"Grid actualizado a {rows}x{columns} - Cubos y magnetos limpiados");
     }
-    public void CloseResultPanel()
-    {
-        resultPanel.SetActive(false);
-        resultAlreadyShown = false;
-        UpdateDebugInfo("Panel de resultado cerrado");
-    }
+
 
     /// <summary>
     /// Muestra el panel cuando se detiene el modo memoria
     /// </summary>
     public void ShowMemoryModeStoppedPanel()
     {
-        // NO verificar resultAlreadyShown aquí porque este es un panel especial del modo memoria
+        // IMPORTANTE: NO mostrar si ya hay un panel de resultado activo
+        if (IsResultPanelActive())
+        {
+            UpdateDebugInfo("Panel de modo memoria NO mostrado - ya hay un panel de resultado activo");
+            return;
+        }
 
         resultPanel.SetActive(true);
 
@@ -413,6 +431,40 @@ public class GameGenerator : MonoBehaviour
         restartButton.onClick.AddListener(LoadNextPuzzleFromMemoryStop);
 
         UpdateDebugInfo("Panel de modo memoria detenido mostrado");
+    }
+
+    // Reemplazar el método ContinueGameAfterWarning con esta versión:
+
+    public void ContinueGameAfterWarning()
+    {
+        resultPanel.SetActive(false);
+        resultAlreadyShown = false;
+        isTimerRunning = true;
+
+        // NUEVO: Reanudar el modo memoria si estaba pausado
+        MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+        if (memorySystem != null && memorySystem.IsMemoryModeActive())
+        {
+            memorySystem.UnpauseMemoryMode();
+            UpdateDebugInfo("Modo memoria reanudado después de continuar");
+        }
+
+        UpdateDebugInfo("Continuando juego - Empujando piezas");
+
+        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+        Vector3 puzzleCenter = tableCenterObject.transform.position;
+
+        foreach (GameObject cube in cubes)
+        {
+            Vector3 directionFromCenter = (cube.transform.position - puzzleCenter).normalized;
+            directionFromCenter.y = 0;
+
+            float outwardPush = 0.15f;
+            float upwardPush = 0.05f;
+            Vector3 displacement = directionFromCenter * outwardPush + Vector3.up * upwardPush;
+
+            cube.transform.position += displacement;
+        }
     }
 
     /// <summary>
@@ -522,6 +574,7 @@ public class GameGenerator : MonoBehaviour
             UpdateDebugInfo($"Puzzle aleatorio seleccionado: {randomToggle.name}");
         }
     }
+    // In GameGenerator.cs
 
     public void RestartGame()
     {
@@ -535,13 +588,26 @@ public class GameGenerator : MonoBehaviour
         timeAlreadySaved = false;
         currentAttempts = 0;
 
-        // Verificar si el modo memoria está activo ANTES de limpiar
         MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
-        bool wasMemoryModeActive = false;
+        bool needsMemoryRestart = false;
+
         if (memorySystem != null && memorySystem.IsMemoryModeActive())
         {
-            wasMemoryModeActive = true;
+            needsMemoryRestart = true;
+
+            // =================================================================
+            // ============= FIX 2: ENSURE THIS LINE IS PRESENT ==============
+            // =================================================================
+            // Detiene limpiamente los efectos en los cubos viejos antes de que se destruyan.
             memorySystem.TemporarilyDisableForRegeneration();
+            // =================================================================
+            // =================================================================
+
+            if (memorySystem.IsMemoryModePaused())
+            {
+                memorySystem.UnpauseMemoryMode();
+            }
+            UpdateDebugInfo("Modo memoria activo - se reiniciará con los nuevos cubos");
         }
 
         // Limpiar efectos de pistas antes de regenerar
@@ -562,10 +628,10 @@ public class GameGenerator : MonoBehaviour
 
         GenerateGame();
 
-        // Si el modo memoria estaba activo, reactivarlo después de generar
-        if (wasMemoryModeActive && memorySystem != null)
+        // Si el modo memoria estaba activo, reiniciarlo con los nuevos cubos
+        if (needsMemoryRestart && memorySystem != null)
         {
-            StartCoroutine(ReactivateMemoryAfterDelay(memorySystem));
+            StartCoroutine(RestartMemoryAfterGeneration(memorySystem));
         }
 
         if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
@@ -576,19 +642,19 @@ public class GameGenerator : MonoBehaviour
             }
         }
 
-        UpdateDebugInfo("Juego reiniciado" + (wasMemoryModeActive ? " - Modo memoria se reactivará" : ""));
+        UpdateDebugInfo("Juego reiniciado" + (needsMemoryRestart ? " - Modo memoria se aplicará a los nuevos cubos" : ""));
     }
-
-    // Coroutine para reactivar memoria después de regenerar
-    private IEnumerator ReactivateMemoryAfterDelay(MemoryModeSystem memorySystem)
+    // Nuevo coroutine específico para reiniciar:
+    private IEnumerator RestartMemoryAfterGeneration(MemoryModeSystem memorySystem)
     {
-        yield return new WaitForSeconds(0.5f); // Esperar a que se generen los cubos
+        // Esperar un frame para que los cubos se generen completamente
+        yield return null;
+        yield return new WaitForSeconds(0.2f);
 
-        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
-        if (cubes.Length > 0)
+        // Aplicar modo memoria a los nuevos cubos
+        if (memorySystem != null)
         {
-            memorySystem.ReactivateAfterRegeneration();
-            UpdateDebugInfo("Modo memoria reactivado después de reiniciar");
+            memorySystem.RestartMemoryModeWithCurrentCubes();
         }
     }
 
@@ -994,40 +1060,7 @@ public class GameGenerator : MonoBehaviour
         UpdateCirclesVisibility();
     }
 
-    public void ContinueGameAfterWarning()
-    {
-        resultPanel.SetActive(false);
-        resultAlreadyShown = false;
-        isTimerRunning = true;
-
-        // NUEVO: Verificar si el modo memoria está activo
-        MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
-        if (memorySystem != null && memorySystem.IsMemoryModeActive())
-        {
-            // Si el modo memoria está activo, mantenerlo
-            UpdateDebugInfo("Continuando juego con modo memoria activo");
-        }
-
-        UpdateDebugInfo("Continuando juego - Empujando piezas");
-
-        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
-        Vector3 puzzleCenter = tableCenterObject.transform.position;
-
-        foreach (GameObject cube in cubes)
-        {
-            Vector3 directionFromCenter = (cube.transform.position - puzzleCenter).normalized;
-            directionFromCenter.y = 0;
-
-            float outwardPush = 0.15f;
-            float upwardPush = 0.05f;
-            Vector3 displacement = directionFromCenter * outwardPush + Vector3.up * upwardPush;
-
-            cube.transform.position += displacement;
-        }
-    }
-
     // Modifica el método LoadNextPuzzle:
-
     private void LoadNextPuzzle()
     {
         if (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1)
@@ -1039,9 +1072,16 @@ public class GameGenerator : MonoBehaviour
             // Verificar si el modo memoria está activo
             MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
             bool wasMemoryModeActive = false;
+
             if (memorySystem != null && memorySystem.IsMemoryModeActive())
             {
                 wasMemoryModeActive = true;
+                // Despausar si estaba pausado
+                if (memorySystem.IsMemoryModePaused())
+                {
+                    memorySystem.UnpauseMemoryMode();
+                    UpdateDebugInfo("Modo memoria despausado para siguiente puzzle");
+                }
                 memorySystem.TemporarilyDisableForRegeneration();
             }
 
@@ -1082,6 +1122,21 @@ public class GameGenerator : MonoBehaviour
         }
     }
 
+    public void CloseResultPanel()
+    {
+        resultPanel.SetActive(false);
+        resultAlreadyShown = false;
+
+        // Si el modo memoria estaba pausado, reanudarlo
+        MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+        if (memorySystem != null && memorySystem.IsMemoryModePaused())
+        {
+            memorySystem.UnpauseMemoryMode();
+            UpdateDebugInfo("Modo memoria reanudado al cerrar panel");
+        }
+
+        UpdateDebugInfo("Panel de resultado cerrado");
+    }
     // Nuevo método para generar puzzle y reactivar memoria
     private IEnumerator GenerateNextPuzzleAndReactivateMemory(MemoryModeSystem memorySystem)
     {
