@@ -525,19 +525,31 @@ public class MemoryModeSystem : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Reactiva el modo memoria después de regenerar el puzzle
-    /// </summary>
     public void ReactivateAfterRegeneration()
     {
         if (memoryModeEnabled && memoryModeActive)
         {
             memoryModePaused = false; // Asegurarse de que no está pausado
 
+            // IMPORTANTE: Limpiar completamente los controladores anteriores
+            StopAllCubeControllers();
+            cubeControllers.Clear();
+            originalCubeMaterials.Clear();
+
             // Reactivar el modo memoria con los nuevos cubos
             GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
             if (cubes.Length > 0)
             {
+                // Limpiar cualquier CubeMemoryController residual en los cubos nuevos
+                foreach (GameObject cube in cubes)
+                {
+                    CubeMemoryController oldController = cube.GetComponent<CubeMemoryController>();
+                    if (oldController != null)
+                    {
+                        Destroy(oldController);
+                    }
+                }
+
                 StartMemoryMode();
 
                 // Asegurar que el timer esté corriendo
