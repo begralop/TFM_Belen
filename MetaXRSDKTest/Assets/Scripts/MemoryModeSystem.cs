@@ -562,7 +562,7 @@ public class MemoryModeSystem : MonoBehaviour
     {
         if (memoryModeActive && memoryModeEnabled)
         {
-            // Limpiar controladores anteriores
+            // Limpiar controladores anteriores completamente
             StopAllCubeControllers();
             cubeControllers.Clear();
             originalCubeMaterials.Clear();
@@ -570,10 +570,27 @@ public class MemoryModeSystem : MonoBehaviour
             // Despausar si estaba pausado
             memoryModePaused = false;
 
-            // Iniciar con los nuevos cubos
-            StartMemoryMode();
+            // Buscar los nuevos cubos
+            GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
 
-            UpdateDebugInfo("Modo memoria reiniciado con nuevos cubos");
+            if (cubes.Length > 0)
+            {
+                // Iniciar con los nuevos cubos
+                StartMemoryMode();
+
+                // Asegurar que el timer esté corriendo
+                if (gameGenerator != null)
+                {
+                    gameGenerator.ResumeTimer();
+                }
+
+                UpdateDebugInfo($"Modo memoria REINICIADO con {cubes.Length} nuevos cubos");
+                UpdateDisplays();
+            }
+            else
+            {
+                UpdateDebugInfo("ERROR: No se encontraron cubos para reiniciar el modo memoria");
+            }
         }
     }
     /// <summary>
@@ -762,13 +779,6 @@ public class MemoryModeSystem : MonoBehaviour
 
     void StartMemoryMode()
     {
-        // =================================================================
-        // ===================== FIX 1: DELETE THIS LINE ===================
-        // =================================================================
-        // StopAllCubeControllers();   // Esta línea es redundante y potencialmente problemática
-        // =================================================================
-        // =================================================================
-
         GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
 
         if (cubes.Length == 0)
@@ -777,16 +787,48 @@ public class MemoryModeSystem : MonoBehaviour
             return;
         }
 
-        // El resto del método se queda igual...
+        // Limpiar cualquier controlador existente antes de crear nuevos
+        foreach (var kvp in cubeControllers)
+        {
+            if (kvp.Value != null && kvp.Key != null)
+            {
+                // Verificar si el cubo todavía existe
+                bool cubeStillExists = false;
+                foreach (GameObject cube in cubes)
+                {
+                    if (cube == kvp.Key)
+                    {
+                        cubeStillExists = true;
+                        break;
+                    }
+                }
+
+                // Si el cubo ya no existe, destruir el controlador
+                if (!cubeStillExists)
+                {
+                    Destroy(kvp.Value);
+                }
+            }
+        }
+
+        // Limpiar el diccionario
+        cubeControllers.Clear();
+        originalCubeMaterials.Clear();
+
+        // Crear nuevos controladores para todos los cubos
         foreach (GameObject cube in cubes)
         {
             SaveOriginalMaterials(cube);
 
-            CubeMemoryController controller = cube.GetComponent<CubeMemoryController>();
-            if (controller == null)
+            // Remover cualquier controlador existente
+            CubeMemoryController existingController = cube.GetComponent<CubeMemoryController>();
+            if (existingController != null)
             {
-                controller = cube.AddComponent<CubeMemoryController>();
+                Destroy(existingController);
             }
+
+            // Crear nuevo controlador
+            CubeMemoryController controller = cube.AddComponent<CubeMemoryController>();
 
             float randomOffset = Random.Range(0f, visibleTime + hiddenTime);
             controller.Initialize(visibleTime, hiddenTime, randomOffset, grayMaterial);
@@ -879,16 +921,12 @@ public class MemoryModeSystem : MonoBehaviour
         StopMemoryMode();
     }
 }
-
-/// <summary>
-/// Controlador individual para cada cubo en modo memoria
-/// </summary>
 public class CubeMemoryController : MonoBehaviour
 {
     private float visibleTime;
     private float hiddenTime;
     private bool isVisible;
-    private bool isPaused = false;  // NUEVO: Estado de pausa
+    private bool isPaused = false;
     private Material grayMaterial;
     private Dictionary<string, Material> originalMaterials = new Dictionary<string, Material>();
     private Coroutine memoryCoroutine;
@@ -901,7 +939,6 @@ public class CubeMemoryController : MonoBehaviour
     private Material lightBeamMaterial;
     private Color beamColor;
 
-    // NUEVO: Métodos para pausar y reanudar efectos
     public void PauseEffects()
     {
         isPaused = true;
@@ -920,16 +957,15 @@ public class CubeMemoryController : MonoBehaviour
     {
         isPaused = false;
 
-        // Reactivar el haz de luz
-        if (lightBeamObject != null)
-        {
-            lightBeamObject.SetActive(true);
-        }
-
-        // Si el cubo debería estar gris, aplicarlo de nuevo
+        // Si el cubo debería estar gris, aplicarlo de nuevo Y mostrar el haz
         if (!isVisible)
         {
             ApplyGrayMaterial();
+            ShowLightBeam();
+        }
+        else
+        {
+            HideLightBeam();
         }
     }
 
@@ -948,9 +984,16 @@ public class CubeMemoryController : MonoBehaviour
         float offsetInCycle = startOffset % cycleTime;
         isVisible = offsetInCycle < visible;
 
+        // Aplicar el estado inicial correctamente
         if (!isVisible)
         {
             ApplyGrayMaterial();
+            ShowLightBeam();  // Mostrar el haz si empieza en estado gris
+        }
+        else
+        {
+            RestoreOriginalMaterials();  // IMPORTANTE: Restaurar materiales originales
+            HideLightBeam();  // Ocultar el haz si empieza en estado visible
         }
 
         float remainingTime = isVisible ?
@@ -1022,6 +1065,9 @@ public class CubeMemoryController : MonoBehaviour
                     UpdateBeamCurve();
 
                     hasLightBeam = true;
+
+                    // IMPORTANTE: Inicialmente ocultar el haz
+                    lightBeamObject.SetActive(false);
 
                     Debug.Log($"Haz de luz configurado para {gameObject.name} con color RGB({beamColor.r:F2}, {beamColor.g:F2}, {beamColor.b:F2})");
                 }
@@ -1103,9 +1149,28 @@ public class CubeMemoryController : MonoBehaviour
         }
     }
 
+    // Nuevo método para mostrar el haz de luz
+    void ShowLightBeam()
+    {
+        if (lightBeamObject != null && !isPaused)
+        {
+            lightBeamObject.SetActive(true);
+        }
+    }
+
+    // Nuevo método para ocultar el haz de luz
+    void HideLightBeam()
+    {
+        if (lightBeamObject != null)
+        {
+            lightBeamObject.SetActive(false);
+        }
+    }
+
     void Update()
     {
-        if (hasLightBeam && lightBeam != null && lightBeamObject != null)
+        // Solo actualizar el haz si está activo y visible
+        if (hasLightBeam && lightBeam != null && lightBeamObject != null && lightBeamObject.activeSelf)
         {
             // Solo actualizar si el cubo se ha movido significativamente
             Vector3 currentCubePos = transform.position;
@@ -1136,6 +1201,16 @@ public class CubeMemoryController : MonoBehaviour
         yield return new WaitForSeconds(initialWait);
         isVisible = !isVisible;
 
+        // Actualizar el estado del haz después del cambio inicial
+        if (isVisible)
+        {
+            HideLightBeam();
+        }
+        else
+        {
+            ShowLightBeam();
+        }
+
         while (true)
         {
             // Si está pausado, mantener el estado actual sin cambios
@@ -1148,12 +1223,14 @@ public class CubeMemoryController : MonoBehaviour
             if (isVisible)
             {
                 RestoreOriginalMaterials();
+                HideLightBeam();  // Ocultar el haz cuando el cubo es visible
                 yield return new WaitForSeconds(visibleTime);
                 isVisible = false;
             }
             else
             {
                 ApplyGrayMaterial();
+                ShowLightBeam();  // Mostrar el haz cuando el cubo está gris
                 yield return new WaitForSeconds(hiddenTime);
                 isVisible = true;
             }
@@ -1206,7 +1283,11 @@ public class CubeMemoryController : MonoBehaviour
             lightBeamMaterial = null;
         }
 
+        // IMPORTANTE: Siempre restaurar los materiales originales al detener
         RestoreOriginalMaterials();
+        
+        // Limpiar las referencias
+        originalMaterials.Clear();
     }
 
     void OnDestroy()

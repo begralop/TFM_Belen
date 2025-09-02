@@ -433,19 +433,20 @@ public class GameGenerator : MonoBehaviour
         UpdateDebugInfo("Panel de modo memoria detenido mostrado");
     }
 
-    // Reemplazar el método ContinueGameAfterWarning con esta versión:
-
     public void ContinueGameAfterWarning()
     {
         resultPanel.SetActive(false);
         resultAlreadyShown = false;
         isTimerRunning = true;
 
-        // NUEVO: Reanudar el modo memoria si estaba pausado
+        // Reanudar el modo memoria si estaba pausado
         MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
         if (memorySystem != null && memorySystem.IsMemoryModeActive())
         {
-            memorySystem.UnpauseMemoryMode();
+            if (memorySystem.IsMemoryModePaused())
+            {
+                memorySystem.UnpauseMemoryMode();
+            }
             UpdateDebugInfo("Modo memoria reanudado después de continuar");
         }
 
@@ -470,9 +471,7 @@ public class GameGenerator : MonoBehaviour
     /// <summary>
     /// Continuar resolviendo el puzzle sin modo memoria
     /// </summary>
-    /// <summary>
-    /// Continuar resolviendo el puzzle sin modo memoria
-    /// </summary>
+
     void ContinueWithoutMemoryMode()
     {
         resultPanel.SetActive(false);
@@ -574,8 +573,6 @@ public class GameGenerator : MonoBehaviour
             UpdateDebugInfo($"Puzzle aleatorio seleccionado: {randomToggle.name}");
         }
     }
-    // In GameGenerator.cs
-
     public void RestartGame()
     {
         resultPanel.SetActive(false);
@@ -589,20 +586,16 @@ public class GameGenerator : MonoBehaviour
         currentAttempts = 0;
 
         MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
-        bool needsMemoryRestart = false;
+        bool wasMemoryModeActive = false;
 
         if (memorySystem != null && memorySystem.IsMemoryModeActive())
         {
-            needsMemoryRestart = true;
+            wasMemoryModeActive = true;
 
-            // =================================================================
-            // ============= FIX 2: ENSURE THIS LINE IS PRESENT ==============
-            // =================================================================
-            // Detiene limpiamente los efectos en los cubos viejos antes de que se destruyan.
+            // Detiene limpiamente los efectos en los cubos viejos antes de que se destruyan
             memorySystem.TemporarilyDisableForRegeneration();
-            // =================================================================
-            // =================================================================
 
+            // Si estaba pausado, despausar
             if (memorySystem.IsMemoryModePaused())
             {
                 memorySystem.UnpauseMemoryMode();
@@ -629,7 +622,7 @@ public class GameGenerator : MonoBehaviour
         GenerateGame();
 
         // Si el modo memoria estaba activo, reiniciarlo con los nuevos cubos
-        if (needsMemoryRestart && memorySystem != null)
+        if (wasMemoryModeActive && memorySystem != null)
         {
             StartCoroutine(RestartMemoryAfterGeneration(memorySystem));
         }
@@ -642,21 +635,31 @@ public class GameGenerator : MonoBehaviour
             }
         }
 
-        UpdateDebugInfo("Juego reiniciado" + (needsMemoryRestart ? " - Modo memoria se aplicará a los nuevos cubos" : ""));
+        UpdateDebugInfo("Juego reiniciado" + (wasMemoryModeActive ? " - Modo memoria se aplicará a los nuevos cubos" : ""));
     }
-    // Nuevo coroutine específico para reiniciar:
+
+    // Coroutine mejorado para reiniciar el modo memoria
     private IEnumerator RestartMemoryAfterGeneration(MemoryModeSystem memorySystem)
     {
         // Esperar un frame para que los cubos se generen completamente
         yield return null;
         yield return new WaitForSeconds(0.2f);
 
-        // Aplicar modo memoria a los nuevos cubos
-        if (memorySystem != null)
+        // Verificar que los cubos existan
+        GameObject[] cubes = GameObject.FindGameObjectsWithTag("cube");
+
+        if (cubes.Length > 0)
         {
-            memorySystem.RestartMemoryModeWithCurrentCubes();
+            // Reactivar el modo memoria con los nuevos cubos
+            memorySystem.ReactivateAfterRegeneration();
+            UpdateDebugInfo($"Modo memoria reactivado con {cubes.Length} cubos nuevos");
+        }
+        else
+        {
+            UpdateDebugInfo("ERROR: No se encontraron cubos para reactivar el modo memoria");
         }
     }
+
 
     public void OnCubePlaced()
     {
