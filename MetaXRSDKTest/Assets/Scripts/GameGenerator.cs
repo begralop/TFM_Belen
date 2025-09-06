@@ -260,7 +260,7 @@ public class GameGenerator : MonoBehaviour
         currentAttempts++;
         UpdateDebugInfo($"RESULTADO: Intento {currentAttempts} - {(isSuccess ? "ÉXITO" : "FALLO")}");
 
-        // NUEVO: Pausar el modo memoria si está activo
+        // Pausar el modo memoria si está activo
         MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
         if (memorySystem != null && memorySystem.IsMemoryModeActive())
         {
@@ -273,7 +273,6 @@ public class GameGenerator : MonoBehaviour
         continueButton.onClick.RemoveAllListeners();
         restartButton.onClick.RemoveAllListeners();
 
-        // SIEMPRE configurar el botón de reiniciar para reiniciar el juego
         restartButton.onClick.AddListener(RestartGame);
         var restartButtonText = restartButton.GetComponentInChildren<TextMeshProUGUI>();
         if (restartButtonText != null)
@@ -290,26 +289,79 @@ public class GameGenerator : MonoBehaviour
 
                 if (!string.IsNullOrEmpty(puzzleId) && currentUser != "Invitado")
                 {
-                    int totalCubes = rows * columns;
-                    UserManager.AddScore(currentUser, puzzleId, elapsedTime, currentAttempts, totalCubes);
-                    Debug.Log($"Puntuación guardada");
+                    // === NUEVO: Recopilar información completa para las estadísticas ===
+
+                    // Verificar si se usaron pistas (contar cuántas veces se activaron)
+                    bool hintsUsed = false;
+                    int hintsCount = 0;
+                    if (hintSystem != null)
+                    {
+                        hintsUsed = hintSystem.AreHintsEnabled();
+                        // Si el HintSystem tiene un contador de activaciones, usarlo
+                        // hintsCount = hintSystem.GetHintsActivationCount();
+                    }
+
+                    // Verificar si se usó modo memoria
+                    bool memoryUsed = false;
+                    float memoryVisibleTime = 0;
+                    float memoryHiddenTime = 0;
+                    if (memorySystem != null)
+                    {
+                        memoryUsed = memorySystem.IsMemoryModeActive();
+                        // Si queremos guardar la configuración de tiempos
+                        // memoryVisibleTime = memorySystem.GetVisibleTime();
+                        // memoryHiddenTime = memorySystem.GetHiddenTime();
+                    }
+
+                    // Crear entrada de puntuación completa
+                    ScoreEntry newEntry = new ScoreEntry(
+                        elapsedTime,           // tiempo
+                        currentAttempts,       // intentos
+                        System.DateTime.Now.ToString("dd/MM/yyyy"), // fecha
+                        rows * columns,        // total de cubos
+                        hintsUsed,            // si usó pistas
+                        memoryUsed,           // si usó modo memoria
+                        rows,                 // filas del grid
+                        columns,              // columnas del grid
+                        puzzleId              // nombre del puzzle
+                    );
+
+                    // Guardar la entrada completa
+                    UserManager.AddScoreEntry(currentUser, puzzleId, newEntry);
+
+                    Debug.Log($"Puntuación guardada: Tiempo={elapsedTime:F2}s, Intentos={currentAttempts}, " +
+                             $"Grid={rows}x{columns}, Pistas={hintsUsed}, Memoria={memoryUsed}");
+
                     timeAlreadySaved = true;
 
+                    // Actualizar panel de puntuaciones si está visible
                     if (scoreDisplay != null && selectedImage != null && selectedImage.sprite != null)
                     {
                         StartCoroutine(RefreshScoreDisplayAfterDelay());
                     }
+
+                    // === NUEVO: Actualizar estadísticas globales del usuario ===
+                    UpdateGlobalUserStats(currentUser, newEntry);
                 }
             }
 
+            // Configurar mensaje de éxito con información adicional
             int minutes = Mathf.FloorToInt(elapsedTime / 60f);
             int seconds = Mathf.FloorToInt(elapsedTime % 60f);
             bool hasNextPuzzle = (currentPuzzleIndex >= 0 && currentPuzzleIndex < availablePuzzles.Count - 1);
             string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
 
+            // NUEVO: Añadir información sobre el modo usado
+            string modeText = "";
+            if (memorySystem != null && memorySystem.IsMemoryModeActive())
+                modeText = " (Modo Memoria)";
+            else if (hintSystem != null && hintSystem.AreHintsEnabled())
+                modeText = " (Con Pistas)";
+
             if (hasNextPuzzle)
             {
-                resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00} con {attemptText}.\n¿Quieres continuar con el siguiente puzzle?";
+                resultMessageText.text = $"¡Bien hecho! Has completado el puzle en {minutes:00}:{seconds:00} " +
+                                        $"con {attemptText}{modeText}.\n¿Quieres continuar con el siguiente puzzle?";
                 var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
                 if (continueButtonText != null)
                     continueButtonText.text = "Siguiente";
@@ -317,7 +369,8 @@ public class GameGenerator : MonoBehaviour
             }
             else
             {
-                resultMessageText.text = $"¡Felicidades! Has completado el puzle en {minutes:00}:{seconds:00} con {attemptText}.\n¡Has completado todos los puzzles disponibles!";
+                resultMessageText.text = $"¡Felicidades! Has completado el puzle en {minutes:00}:{seconds:00} " +
+                                        $"con {attemptText}{modeText}.\n¡Has completado todos los puzzles disponibles!";
                 var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
                 if (continueButtonText != null)
                     continueButtonText.text = "Cerrar";
@@ -328,13 +381,25 @@ public class GameGenerator : MonoBehaviour
         {
             // Panel de error/fallo
             string attemptText = currentAttempts == 1 ? "1 intento" : $"{currentAttempts} intentos";
-            resultMessageText.text = $"No has completado el puzle correctamente. Llevas {attemptText}. ¿Quieres seguir intentándolo?";
+            resultMessageText.text = $"No has completado el puzle correctamente. Llevas {attemptText}. " +
+                                    $"¿Quieres seguir intentándolo?";
 
             var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
             if (continueButtonText != null)
                 continueButtonText.text = "Reintentar";
             continueButton.onClick.AddListener(ContinueGameAfterWarning);
         }
+    }
+    void UpdateGlobalUserStats(string username, ScoreEntry newEntry)
+    {
+        // Aquí podrías implementar la actualización de estadísticas globales del usuario
+        // Por ejemplo, usando una clase UserStatistics como definimos antes
+
+        // UserStatistics userStats = UserManager.GetUserStatistics(username);
+        // userStats.UpdateStats(newEntry);
+        // UserManager.SaveUserStatistics(username, userStats);
+
+        Debug.Log($"Estadísticas globales actualizadas para {username}");
     }
 
     private string GetCurrentPuzzleId()
@@ -412,12 +477,12 @@ public class GameGenerator : MonoBehaviour
         resultPanel.SetActive(true);
 
         // Configurar el mensaje específico para modo memoria detenido
-        resultMessageText.text = "No has terminado de completar el puzzle con el modo memoria.\n¿Deseas continuar resolviéndolo sin él?";
+        resultMessageText.text = "No has terminado de completar el puzzle con el modo memoria.\nSe va a detener el modo, ¿Qué deseas hacer?";
 
         // Configurar botón de continuar
         var continueButtonText = continueButton.GetComponentInChildren<TextMeshProUGUI>();
         if (continueButtonText != null)
-            continueButtonText.text = "Continuar resolviendo";
+            continueButtonText.text = "Desactivar y resolver";
 
         continueButton.onClick.RemoveAllListeners();
         continueButton.onClick.AddListener(ContinueWithoutMemoryMode);
@@ -956,14 +1021,16 @@ public class GameGenerator : MonoBehaviour
         float puzzleHeight = gridRows * cubeSize;
         magnetPositions.Clear();
 
-        for (int r = 0; r < gridRows; r++)
+        // IMPORTANTE: Iterar las filas de ATRÁS hacia ADELANTE (mayor Z a menor Z)
+        // Esto hace que la fila 0 esté arriba visualmente
+        for (int r = gridRows - 1; r >= 0; r--)
         {
             for (int c = 0; c < gridColumns; c++)
             {
                 Vector3 magnetPosition = new Vector3(
                     tableCenter.x - puzzleWidth / 2 + c * cubeSize * 0.8f,
                     tableCenter.y + magnetHeightOffset,
-                    tableCenter.z - puzzleHeight / 2 + r * cubeSize * 0.8f
+                    tableCenter.z - puzzleHeight / 2 + (gridRows - 1 - r) * cubeSize * 0.8f
                 );
                 magnetPositions.Add(magnetPosition);
 
@@ -971,13 +1038,21 @@ public class GameGenerator : MonoBehaviour
                 {
                     GameObject newMagnet = Instantiate(magnetPrefab, magnetPosition, Quaternion.identity);
                     newMagnet.tag = "refCube";
-                    newMagnet.transform.localScale = new Vector3(newMagnet.transform.localScale.x, 0.01f, newMagnet.transform.localScale.z);
+                    newMagnet.transform.localScale = new Vector3(
+                        newMagnet.transform.localScale.x,
+                        0.01f,
+                        newMagnet.transform.localScale.z
+                    );
+
+                    // Agregar nombre para debug
+                    newMagnet.name = $"Magnet_R{r}_C{c}";
                 }
             }
         }
 
-        UpdateDebugInfo($"Generados {magnetPositions.Count} imanes");
+        UpdateDebugInfo($"Generados {magnetPositions.Count} imanes con orden corregido");
     }
+
 
     void ClearCurrentMagnets()
     {
@@ -996,20 +1071,23 @@ public class GameGenerator : MonoBehaviour
             Destroy(cube);
         }
     }
-
     public Vector3 GetMagnetPosition(int row, int col)
     {
-        if (row * gridCreator.columns + col < magnetPositions.Count)
+        // FIX: Invertir la fila porque el sistema de coordenadas está al revés
+        // La fila 0 debe estar arriba (Z menor), pero en el array está al revés
+        int invertedRow = rows - 1 - row;
+        int index = invertedRow * columns + col;
+
+        if (index >= 0 && index < magnetPositions.Count)
         {
-            return magnetPositions[row * gridCreator.columns + col];
+            return magnetPositions[index];
         }
         else
         {
-            Debug.LogError("Posición de imán fuera de límites.");
+            Debug.LogError($"Posición de imán fuera de límites. row={row}, col={col}, index={index}");
             return Vector3.zero;
         }
     }
-
     public void OnImageSelected(Image image)
     {
         if (resultPanel != null && resultPanel.activeSelf)

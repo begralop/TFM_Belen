@@ -43,6 +43,8 @@ public class HintSystem : MonoBehaviour
     // Almacenar el imán verde actual y las caras grises actuales
     private GameObject currentGreenMagnet = null;
     private List<GameObject> currentGrayFaceCubes = new List<GameObject>();
+    private int hintsActivationCount = 0;
+    private bool hintsUsedInCurrentGame = false;
 
     void Start()
     {
@@ -162,10 +164,9 @@ public class HintSystem : MonoBehaviour
         }
     }
 
-    // Modifica el método ToggleHints existente para incluir la verificación del modo memoria:
     void ToggleHints()
     {
-        // Si se van a activar las pistas, primero verificar si el modo memoria está activo
+        // Si se van a activar las pistas
         if (!hintsEnabled)
         {
             MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
@@ -174,6 +175,10 @@ public class HintSystem : MonoBehaviour
                 Debug.Log("Desactivando modo memoria para activar pistas");
                 memorySystem.ForceDisableMemoryMode();
             }
+
+            // NUEVO: Incrementar contador
+            hintsActivationCount++;
+            hintsUsedInCurrentGame = true;
         }
 
         hintsEnabled = !hintsEnabled;
@@ -181,17 +186,35 @@ public class HintSystem : MonoBehaviour
 
         if (!hintsEnabled)
         {
-            // Si se desactivan las pistas, restaurar todo y ocultar círculos
             RestoreAllMaterials();
         }
 
-        UpdateDebugInfo($"Sistema: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")}");
+        UpdateDebugInfo($"Sistema: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")} - Activaciones: {hintsActivationCount}");
 
-        // Notificar al GameGenerator para actualizar los círculos
         if (gameGenerator != null)
         {
             gameGenerator.UpdateCirclesVisibility();
         }
+    }
+
+    // NUEVO: Métodos públicos para obtener información
+    public bool WereHintsUsedThisGame()
+    {
+        return hintsUsedInCurrentGame;
+    }
+
+    public int GetHintsActivationCount()
+    {
+        return hintsActivationCount;
+    }
+
+    // NUEVO: Resetear contadores cuando se cambia de puzzle
+    public void OnPuzzleChanged()
+    {
+        RestoreAllMaterials();
+        hintsActivationCount = 0;
+        hintsUsedInCurrentGame = false;
+        UpdateDebugInfo($"Puzzle cambiado - Contadores reseteados");
     }
 
     void UpdateButtonText()
@@ -253,9 +276,14 @@ public class HintSystem : MonoBehaviour
     /// Muestra el imán verde correspondiente a un cubo específico
     /// Solo se llama desde MagnetCircleDetector cuando se suelta un cubo
     /// </summary>
+
+
+    // También actualiza el método ShowGreenMagnetForCube para más claridad en el debug:
+
     public void ShowGreenMagnetForCube(int row, int col)
     {
-        UpdateDebugInfo($"ShowGreenMagnetForCube llamado para posición ({row},{col})");
+        UpdateDebugInfo($"ShowGreenMagnetForCube llamado para fila={row}, columna={col}");
+        UpdateDebugInfo($"Grid actual: {gameGenerator.rows} filas x {gameGenerator.columns} columnas");
 
         if (!AreHintsEnabled())
         {
@@ -462,6 +490,9 @@ public class HintSystem : MonoBehaviour
     /// <summary>
     /// Calcula la posición de un imán basado en fila y columna
     /// </summary>
+    /// <summary>
+    /// Obtiene la posición de un imán desde el GameGenerator, que es la fuente de verdad.
+    /// </summary>
     Vector3 GetMagnetPosition(int row, int col)
     {
         if (gameGenerator == null)
@@ -469,43 +500,12 @@ public class HintSystem : MonoBehaviour
             gameGenerator = FindObjectOfType<GameGenerator>();
             if (gameGenerator == null)
             {
-                UpdateDebugInfo("ERROR: No se pudo encontrar GameGenerator");
+                UpdateDebugInfo("ERROR: No se pudo encontrar GameGenerator para obtener la posición del imán.");
                 return Vector3.zero;
             }
         }
 
-        if (gameGenerator != null)
-        {
-            GameObject tableCenterObject = gameGenerator.tableCenterObject;
-            float cubeSize = gameGenerator.cubeSize;
-            float magnetHeightOffset = gameGenerator.magnetHeightOffset;
-
-            if (tableCenterObject != null)
-            {
-                Vector3 tableCenter = tableCenterObject.transform.position;
-                float puzzleWidth = gameGenerator.columns * cubeSize;
-                float puzzleHeight = gameGenerator.rows * cubeSize;
-
-                Vector3 position = new Vector3(
-                    tableCenter.x - puzzleWidth / 2 + col * cubeSize * 0.8f,
-                    tableCenter.y + magnetHeightOffset,
-                    tableCenter.z - puzzleHeight / 2 + row * cubeSize * 0.8f
-                );
-
-                return position;
-            }
-        }
-
-        return Vector3.zero;
-    }
-
-    /// <summary>
-    /// Método público para limpiar el sistema cuando se cambia de puzzle
-    /// </summary>
-    public void OnPuzzleChanged()
-    {
-        // Limpiar todos los materiales pero mantener el estado de activación
-        RestoreAllMaterials();
-        UpdateDebugInfo($"Puzzle cambiado - Estado mantenido: {(hintsEnabled ? "ACTIVADO" : "DESACTIVADO")}");
+        // Llamar directamente al método de GameGenerator para asegurar consistencia.
+        return gameGenerator.GetMagnetPosition(row, col);
     }
 }

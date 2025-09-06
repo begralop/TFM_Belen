@@ -76,6 +76,7 @@ public class MagnetCircleDetector : MonoBehaviour
         }
     }
 
+
     void CheckIfCubeWasDropped()
     {
         if (currentCube == null || hintSystem == null || !cubeIsInside || effectActivated) return;
@@ -109,7 +110,12 @@ public class MagnetCircleDetector : MonoBehaviour
                         int row, col;
                         if (int.TryParse(parts[1], out row) && int.TryParse(parts[2], out col))
                         {
-                            hintSystem.UpdateDebugInfo($"[CÍRCULO IMÁN] ACTIVANDO imán verde para {currentCube.name} en posición ({row},{col})");
+                            // IMPORTANTE: El nombre del cubo es Cube_fila_columna
+                            // Verificar con debug que estamos pasando los valores correctamente
+                            hintSystem.UpdateDebugInfo($"[CÍRCULO IMÁN] Cubo {currentCube.name} - Parseado: fila={row}, columna={col}");
+                            hintSystem.UpdateDebugInfo($"[CÍRCULO IMÁN] ACTIVANDO imán verde para posición (fila={row}, columna={col})");
+
+                            // Pasar row como row y col como col - NO INVERTIR
                             hintSystem.ShowGreenMagnetForCube(row, col);
 
                             // Marcar como activado para evitar múltiples activaciones
