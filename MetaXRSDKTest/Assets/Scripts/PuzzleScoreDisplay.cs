@@ -4,7 +4,6 @@ using TMPro;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
-using System.Collections;
 
 public class PuzzleScoreDisplay : MonoBehaviour
 {
@@ -12,160 +11,73 @@ public class PuzzleScoreDisplay : MonoBehaviour
     [Tooltip("Panel que contendrá la información de puntuaciones")]
     public GameObject scorePanel;
 
+    [Header("Contenedores internos")]
+    [Tooltip("GameObject contenedor de los textos de puntuaciones")]
+    public GameObject scoresContainer; // Este contendrá timesText, attemptsText, cubesText, datesText
+
     [Header("Componentes de UI - Cuatro TextMesh separados")]
+    [Tooltip("TextMesh para mostrar los tiempos (ej: '1. 01:30')")]
     public TextMeshProUGUI timesText;
+
+    [Tooltip("TextMesh para mostrar los intentos (ej: '2 intentos')")]
     public TextMeshProUGUI attemptsText;
+
+    [Tooltip("TextMesh para mostrar el número de cubos (ej: '12 cubos')")]
     public TextMeshProUGUI cubesText;
+
+    [Tooltip("TextMesh para mostrar las fechas (ej: '27/08/2025')")]
     public TextMeshProUGUI datesText;
 
+
+    // --- AÑADIDO: Campos para el sistema de estadísticas ---
     [Header("=== Sistema de Estadísticas ===")]
     [Tooltip("Botón para alternar entre puntuaciones y estadísticas")]
     public Button viewStatsButton;
     [Tooltip("Texto del botón que cambiará")]
     public TextMeshProUGUI statsButtonText;
-    [Tooltip("Panel de estadísticas detalladas")]
+    [Tooltip("Referencia al panel de estadísticas que se mostrará")]
     public PuzzleStatsPanel statsPanel;
 
-    [Header("=== Indicadores de Modo ===")]
-    public Transform modeIconsContainer;
-    public GameObject hintsIconPrefab;
-    public GameObject memoryIconPrefab;
-
-    [Header("=== Indicadores Visuales ===")]
-    public Color hintsColor = new Color(0.8f, 0.8f, 0.2f);
-    public Color memoryColor = new Color(0.2f, 0.8f, 0.2f);
-    public Color normalColor = Color.white;
 
     [Header("Configuración")]
+    [Tooltip("Número máximo de registros a mostrar")]
     public int maxRecordsToShow = 5;
 
     private string currentPuzzleId;
     private Sprite currentPuzzleSprite;
-    private List<GameObject> createdIcons = new List<GameObject>();
     private bool isShowingStats = false; // Estado para saber qué panel se muestra
+
+    void Awake()
+    {
+        // Validar que todos los componentes estén asignados
+        if (timesText == null) Debug.LogWarning("PuzzleScoreDisplay: timesText no está asignado.");
+        if (attemptsText == null) Debug.LogWarning("PuzzleScoreDisplay: attemptsText no está asignado.");
+        if (cubesText == null) Debug.LogWarning("PuzzleScoreDisplay: cubesText no está asignado.");
+        if (datesText == null) Debug.LogWarning("PuzzleScoreDisplay: datesText no está asignado.");
+        if (viewStatsButton == null) Debug.LogWarning("PuzzleScoreDisplay: viewStatsButton no está asignado.");
+        if (statsButtonText == null) Debug.LogWarning("PuzzleScoreDisplay: statsButtonText no está asignado.");
+        if (statsPanel == null) Debug.LogWarning("PuzzleScoreDisplay: statsPanel no está asignado.");
+    }
 
     void Start()
     {
+        // Asegurarse de que el panel esté oculto al inicio
         if (scorePanel != null)
         {
             scorePanel.SetActive(false);
         }
+        // --- AÑADIDO: Configurar el botón al iniciar ---
         SetupStatsButton();
     }
 
-    void SetupStatsButton()
-    {
-        if (viewStatsButton != null)
-        {
-            viewStatsButton.onClick.RemoveAllListeners();
-            // El listener ahora llama a la nueva función de alternar
-            viewStatsButton.onClick.AddListener(ToggleView);
-            viewStatsButton.gameObject.SetActive(false);
-        }
-    }
-
+   
     /// <summary>
-    /// Alterna la vista entre el panel de puntuaciones y el de estadísticas.
+    /// Actualiza la visualización de puntuaciones con tiempo, intentos, cubos y fecha separados
     /// </summary>
-    void ToggleView()
-    {
-        isShowingStats = !isShowingStats; // Invierte el estado actual
-
-        if (isShowingStats)
-        {
-            // --- MOSTRAR ESTADÍSTICAS ---
-            scorePanel.SetActive(false);
-            statsPanel.ShowStatsForPuzzle(currentPuzzleId, currentPuzzleSprite);
-            if (statsButtonText != null)
-            {
-                statsButtonText.text = "Ver Puntuaciones";
-            }
-        }
-        else
-        {
-            // --- MOSTRAR PUNTUACIONES ---
-            scorePanel.SetActive(true);
-            statsPanel.ClosePanel(); // Cierra el panel de estadísticas
-            UpdateStatsButtonText(); // Restaura el texto original del botón
-        }
-    }
-
-    /// <summary>
-    /// Muestra las puntuaciones para un puzzle, reseteando la vista al estado inicial.
-    /// </summary>
-    public void ShowScoresForPuzzle(Sprite puzzleSprite)
-    {
-        if (puzzleSprite == null) return;
-
-        currentPuzzleSprite = puzzleSprite;
-        currentPuzzleId = puzzleSprite.name;
-
-        // --- Resetear al estado inicial (vista de puntuaciones) ---
-        isShowingStats = false;
-        scorePanel.SetActive(true);
-        statsPanel.ClosePanel(); // Asegurarse de que el panel de stats esté cerrado
-
-        UpdateScoreDisplay();
-        UpdateStatsButtonText(); // Actualiza el botón (visibilidad y texto)
-    }
-
-    /// <summary>
-    /// Actualiza la visibilidad y el texto del botón de estadísticas.
-    /// </summary>
-    void UpdateStatsButtonText()
-    {
-        if (viewStatsButton == null) return;
-
-        string currentUser = UserManager.GetCurrentUser();
-        List<ScoreEntry> scoreEntries = UserManager.GetScoreEntries(currentUser, currentPuzzleId);
-
-        bool hasData = scoreEntries != null && scoreEntries.Count > 0;
-        viewStatsButton.gameObject.SetActive(hasData);
-
-        if (hasData && statsButtonText != null)
-        {
-            // Texto cuando se muestran las puntuaciones
-            statsButtonText.text = "Ver Estadísticas";
-        }
-    }
-
-    /// <summary>
-    /// Oculta ambos paneles.
-    /// </summary>
-    public void HideScorePanel()
-    {
-        if (scorePanel != null)
-        {
-            scorePanel.SetActive(false);
-        }
-        if (statsPanel != null)
-        {
-            statsPanel.ClosePanel();
-        }
-        ClearModeIcons();
-    }
-
-    /// <summary>
-    /// Refresca las puntuaciones y resetea la vista al panel de puntuaciones.
-    /// </summary>
-    public void RefreshScores()
-    {
-        if (!string.IsNullOrEmpty(currentPuzzleId))
-        {
-            // Llamar a ShowScoresForPuzzle resetea la vista correctamente
-            ShowScoresForPuzzle(currentPuzzleSprite);
-        }
-    }
-
-    // --- El resto de métodos (UpdateScoreDisplay, FormatTime, etc.) permanecen igual ---
-    // (Asegúrate de mantener el resto de tus funciones que no he incluido aquí para brevedad)
-    #region "Métodos sin cambios"
     private void UpdateScoreDisplay()
     {
         string currentUser = UserManager.GetCurrentUser();
         List<ScoreEntry> scoreEntries = UserManager.GetScoreEntries(currentUser, currentPuzzleId);
-
-        ClearModeIcons();
 
         if (scoreEntries == null || scoreEntries.Count == 0)
         {
@@ -185,27 +97,10 @@ public class PuzzleScoreDisplay : MonoBehaviour
             for (int i = 0; i < recordsToShow; i++)
             {
                 ScoreEntry entry = scoreEntries[i];
-                string timeFormatted = FormatTime(entry.time);
-                string coloredTime = timeFormatted;
-                if (entry.memoryModeUsed)
-                {
-                    coloredTime = $"<color=#{ColorUtility.ToHtmlStringRGB(memoryColor)}>{timeFormatted}</color>";
-                }
-                else if (entry.hintsUsed)
-                {
-                    coloredTime = $"<color=#{ColorUtility.ToHtmlStringRGB(hintsColor)}>{timeFormatted}</color>";
-                }
-                timesBuilder.AppendLine($"{i + 1}. {coloredTime}");
-                string attemptText = entry.attempts == 1 ? "1" : $"{entry.attempts}";
-                if (entry.attempts == 1)
-                {
-                    attemptText = $"<color=#FFD700>{attemptText}</color>";
-                }
-                attemptsBuilder.AppendLine(attemptText);
-                string cubeText = (entry.gridRows > 0 && entry.gridColumns > 0) ? $"{entry.gridRows}x{entry.gridColumns}" : (entry.cubes > 0 ? $"{entry.cubes}" : "3x3");
-                cubesBuilder.AppendLine(cubeText);
+                timesBuilder.AppendLine($"{i + 1}. {FormatTime(entry.time)}");
+                attemptsBuilder.AppendLine(entry.attempts == 1 ? "1" : $"{entry.attempts}");
+                cubesBuilder.AppendLine(entry.cubes == 0 ? "N/A" : $"{entry.cubes}");
                 datesBuilder.AppendLine(entry.date);
-                CreateModeIcons(entry, i);
             }
 
             if (scoreEntries.Count > maxRecordsToShow)
@@ -223,45 +118,195 @@ public class PuzzleScoreDisplay : MonoBehaviour
             if (datesText != null) datesText.text = datesBuilder.ToString();
         }
     }
-    void CreateModeIcons(ScoreEntry entry, int index)
+
+    // --- AÑADIDO: Sección completa para la lógica del botón ---
+    #region LogicaBotonEstadisticas
+
+    /// <summary>
+    /// Configura el listener del botón de estadísticas.
+    /// </summary>
+    void SetupStatsButton()
     {
-        if (modeIconsContainer == null) return;
-        float yOffset = index * -30f;
-        float xOffset = 0;
-        if (entry.hintsUsed && hintsIconPrefab != null)
+        if (viewStatsButton != null)
         {
-            GameObject icon = Instantiate(hintsIconPrefab, modeIconsContainer);
-            RectTransform rect = icon.GetComponent<RectTransform>();
-            if (rect != null) { rect.anchoredPosition = new Vector2(xOffset, yOffset); xOffset += 25; }
-            createdIcons.Add(icon);
-        }
-        if (entry.memoryModeUsed && memoryIconPrefab != null)
-        {
-            GameObject icon = Instantiate(memoryIconPrefab, modeIconsContainer);
-            RectTransform rect = icon.GetComponent<RectTransform>();
-            if (rect != null) { rect.anchoredPosition = new Vector2(xOffset, yOffset); }
-            createdIcons.Add(icon);
+            viewStatsButton.onClick.RemoveAllListeners();
+            viewStatsButton.onClick.AddListener(ToggleView);
+            viewStatsButton.gameObject.SetActive(false);
         }
     }
-    void ClearModeIcons()
+
+    /// <summary>
+    /// Alterna la vista entre el panel de puntuaciones y el de estadísticas.
+    /// </summary>
+    void ToggleView()
     {
-        foreach (GameObject icon in createdIcons) { if (icon != null) Destroy(icon); }
-        createdIcons.Clear();
-        if (modeIconsContainer != null) { foreach (Transform child in modeIconsContainer) { Destroy(child.gameObject); } }
+        isShowingStats = !isShowingStats;
+
+        if (isShowingStats)
+        {
+            // Ocultar contenedor de puntuaciones (no el panel principal)
+            if (scoresContainer != null)
+            {
+                scoresContainer.SetActive(false);
+            }
+            else
+            {
+                // Si no hay contenedor, ocultar los textos individuales
+                if (timesText != null) timesText.gameObject.SetActive(false);
+                if (attemptsText != null) attemptsText.gameObject.SetActive(false);
+                if (cubesText != null) cubesText.gameObject.SetActive(false);
+                if (datesText != null) datesText.gameObject.SetActive(false);
+            }
+
+            // Mostrar el panel de estadísticas
+            if (statsPanel != null)
+            {
+                statsPanel.ShowStatsForPuzzle(currentPuzzleId, currentPuzzleSprite);
+            }
+
+            if (statsButtonText != null)
+            {
+                statsButtonText.text = "Ver Puntuaciones";
+            }
+        }
+        else
+        {
+            // Mostrar contenedor de puntuaciones
+            if (scoresContainer != null)
+            {
+                scoresContainer.SetActive(true);
+            }
+            else
+            {
+                // Si no hay contenedor, mostrar los textos individuales
+                if (timesText != null) timesText.gameObject.SetActive(true);
+                if (attemptsText != null) attemptsText.gameObject.SetActive(true);
+                if (cubesText != null) cubesText.gameObject.SetActive(true);
+                if (datesText != null) datesText.gameObject.SetActive(true);
+            }
+
+            // Ocultar el panel de estadísticas
+            if (statsPanel != null)
+            {
+                statsPanel.ClosePanel();
+            }
+
+            // Actualizar los datos de puntuaciones
+            UpdateScoreDisplay();
+
+            if (statsButtonText != null)
+            {
+                statsButtonText.text = "Ver Estadísticas";
+            }
+        }
     }
+
+    // Y actualiza ShowScoresForPuzzle:
+
+    public void ShowScoresForPuzzle(Sprite puzzleSprite)
+    {
+        if (puzzleSprite == null)
+        {
+            Debug.LogWarning("No se proporcionó un sprite de puzzle");
+            return;
+        }
+
+        currentPuzzleSprite = puzzleSprite;
+        currentPuzzleId = puzzleSprite.name;
+
+        // Resetear la vista al estado inicial (puntuaciones)
+        isShowingStats = false;
+
+        // Mostrar el panel principal ya que hay un puzzle seleccionado
+        if (scorePanel != null) scorePanel.SetActive(true);
+
+        // Asegurarse de que el contenedor de puntuaciones esté visible
+        if (scoresContainer != null)
+        {
+            scoresContainer.SetActive(true);
+        }
+        else
+        {
+            // Si no hay contenedor, mostrar los textos individuales
+            if (timesText != null) timesText.gameObject.SetActive(true);
+            if (attemptsText != null) attemptsText.gameObject.SetActive(true);
+            if (cubesText != null) cubesText.gameObject.SetActive(true);
+            if (datesText != null) datesText.gameObject.SetActive(true);
+        }
+
+        // Asegurarse de que el panel de stats esté cerrado
+        if (statsPanel != null) statsPanel.ClosePanel();
+
+        // Obtener y mostrar las puntuaciones y actualizar el botón
+        UpdateScoreDisplay();
+        UpdateStatsButtonText();
+    }
+    /// <summary>
+    /// Actualiza la visibilidad y el texto del botón de estadísticas.
+    /// </summary>
+    void UpdateStatsButtonText()
+    {
+        if (viewStatsButton == null) return;
+
+        string currentUser = UserManager.GetCurrentUser();
+        var scoreEntries = UserManager.GetScoreEntries(currentUser, currentPuzzleId);
+        bool hasData = scoreEntries != null && scoreEntries.Count > 0;
+
+        viewStatsButton.gameObject.SetActive(hasData);
+
+        if (hasData && statsButtonText != null)
+        {
+            statsButtonText.text = "Ver Estadísticas";
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Muestra mensaje cuando no hay puntuaciones
+    /// </summary>
     private void ShowNoScoresMessage()
     {
-        if (timesText != null) timesText.text = "<color=#808080>Sin registros</color>";
+        if (timesText != null) timesText.text = "Sin registros";
         if (attemptsText != null) attemptsText.text = "-";
         if (cubesText != null) cubesText.text = "-";
         if (datesText != null) datesText.text = "--/--/--";
-        if (viewStatsButton != null) viewStatsButton.gameObject.SetActive(false);
     }
+
+    /// <summary>
+    /// Formatea el tiempo en minutos:segundos
+    /// </summary>
     private string FormatTime(float timeInSeconds)
     {
         int minutes = Mathf.FloorToInt(timeInSeconds / 60f);
         int seconds = Mathf.FloorToInt(timeInSeconds % 60f);
         return $"{minutes:00}:{seconds:00}";
     }
-    #endregion
+
+    /// <summary>
+    /// Oculta el panel de puntuaciones y el de estadísticas.
+    /// </summary>
+    public void HideScorePanel()
+    {
+        if (scorePanel != null)
+        {
+            scorePanel.SetActive(false);
+        }
+        // --- AÑADIDO: Ocultar también el panel de estadísticas ---
+        if (statsPanel != null)
+        {
+            statsPanel.ClosePanel();
+        }
+    }
+
+    /// <summary>
+    /// Método para refrescar las puntuaciones
+    /// </summary>
+    public void RefreshScores()
+    {
+        if (!string.IsNullOrEmpty(currentPuzzleId))
+        {
+            UpdateScoreDisplay();
+        }
+    }
 }

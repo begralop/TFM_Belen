@@ -1,49 +1,40 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections.Generic;
 using System.Linq;
 
 /// <summary>
-/// Gestiona un panel de estadísticas simplificado para un puzzle específico.
-/// Muestra el tiempo máximo, mínimo, promedio y el desglose de partidas por modo de juego.
+/// Gestiona un panel de estadísticas con campos de texto individuales para cada dato.
 /// </summary>
 public class PuzzleStatsPanel : MonoBehaviour
 {
-    [Header("=== Panel Principal ===")]
+    [Header("Panel Principal")]
     public GameObject statsPanel;
-    public CanvasGroup canvasGroup;
-    public TextMeshProUGUI puzzleNameText;
-    public Button closeButton;
 
-    [Header("=== Estadísticas Simplificadas ===")]
-    [Tooltip("Texto para mostrar el mejor tiempo.")]
+    [Header("Campos de Estadísticas Individuales")]
+    [Tooltip("El TextMeshPro para el MEJOR tiempo")]
     public TextMeshProUGUI bestTimeText;
-    [Tooltip("Texto para mostrar el peor tiempo.")]
+
+    [Tooltip("El TextMeshPro para el PEOR tiempo")]
     public TextMeshProUGUI worstTimeText;
-    [Tooltip("Texto para mostrar el tiempo promedio.")]
+
+    [Tooltip("El TextMeshPro para el tiempo PROMEDIO")]
     public TextMeshProUGUI averageTimeText;
-    [Tooltip("Texto para las veces completado en modo memoria.")]
-    public TextMeshProUGUI memoryCompletionsText;
-    [Tooltip("Texto para las veces completado en modo normal.")]
+
+    [Tooltip("El TextMeshPro para los intentos en MODO NORMAL")]
     public TextMeshProUGUI normalCompletionsText;
+
+    [Tooltip("El TextMeshPro para los intentos en MODO MEMORIA")]
+    public TextMeshProUGUI memoryCompletionsText;
+
     [Tooltip("Objeto que se muestra cuando no hay datos.")]
     public GameObject noDataMessageObject;
 
-    [Header("=== Configuración Visual ===")]
-    public float animationDuration = 0.3f;
-
     private List<ScoreEntry> allScores;
-    private Coroutine animationCoroutine;
 
     void Start()
     {
-        if (closeButton != null)
-        {
-            closeButton.onClick.AddListener(ClosePanel);
-        }
-
         if (statsPanel != null)
         {
             statsPanel.SetActive(false);
@@ -51,36 +42,24 @@ public class PuzzleStatsPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Muestra el panel con las estadísticas para un puzzle determinado.
+    /// Muestra el panel y actualiza los valores de las estadísticas.
     /// </summary>
     public void ShowStatsForPuzzle(string puzzleId, Sprite puzzleSprite)
     {
+        if (statsPanel == null) return;
+
         string currentUser = UserManager.GetCurrentUser();
         allScores = UserManager.GetScoreEntries(currentUser, puzzleId);
 
-        if (statsPanel == null) return;
-
         statsPanel.SetActive(true);
-
-        if (animationCoroutine != null)
-        {
-            StopCoroutine(animationCoroutine);
-        }
-        animationCoroutine = StartCoroutine(AnimatePanel(true));
-
-        UpdateSimplifiedStats(puzzleId);
+        UpdateStatsDisplay();
     }
 
     /// <summary>
-    /// Calcula y muestra las estadísticas clave en la UI.
+    /// Calcula y muestra los valores en los campos de texto individuales.
     /// </summary>
-    private void UpdateSimplifiedStats(string puzzleId)
+    private void UpdateStatsDisplay()
     {
-        if (puzzleNameText != null)
-        {
-            puzzleNameText.text = $"Estadísticas de {FormatPuzzleName(puzzleId)}";
-        }
-
         bool hasData = allScores != null && allScores.Any();
 
         if (noDataMessageObject != null)
@@ -88,12 +67,12 @@ public class PuzzleStatsPanel : MonoBehaviour
             noDataMessageObject.SetActive(!hasData);
         }
 
-        // Ocultar textos de estadísticas si no hay datos
+        // Activa o desactiva todos los campos de texto según si hay datos
         bestTimeText.gameObject.SetActive(hasData);
         worstTimeText.gameObject.SetActive(hasData);
         averageTimeText.gameObject.SetActive(hasData);
-        memoryCompletionsText.gameObject.SetActive(hasData);
         normalCompletionsText.gameObject.SetActive(hasData);
+        memoryCompletionsText.gameObject.SetActive(hasData);
 
         if (!hasData)
         {
@@ -107,79 +86,32 @@ public class PuzzleStatsPanel : MonoBehaviour
         int memoryCompletions = allScores.Count(s => s.memoryModeUsed);
         int normalCompletions = allScores.Count(s => !s.memoryModeUsed);
 
-        // --- Actualización de la UI ---
+        // --- Actualización de la UI (campo por campo) ---
         if (bestTimeText != null)
-            bestTimeText.text = $"Mejor tiempo:\t{FormatTime(bestTime)}";
+            bestTimeText.text = FormatTime(bestTime);
 
         if (worstTimeText != null)
-            worstTimeText.text = $"Peor tiempo:\t{FormatTime(worstTime)}";
+            worstTimeText.text = FormatTime(worstTime);
 
         if (averageTimeText != null)
-            averageTimeText.text = $"Tiempo promedio:\t{FormatTime(avgTime)}";
-
-        if (memoryCompletionsText != null)
-            memoryCompletionsText.text = $"Finalizado (Memoria):\t{memoryCompletions} veces";
+            averageTimeText.text = FormatTime(avgTime);
 
         if (normalCompletionsText != null)
-            normalCompletionsText.text = $"Finalizado (Normal):\t{normalCompletions} veces";
+            normalCompletionsText.text = $"{normalCompletions} veces";
+
+        if (memoryCompletionsText != null)
+            memoryCompletionsText.text = $"{memoryCompletions} veces";
     }
 
     /// <summary>
-    /// Oculta el panel de estadísticas con una animación.
+    /// Oculta el panel de estadísticas. Es llamado por PuzzleScoreDisplay.
     /// </summary>
     public void ClosePanel()
     {
         if (statsPanel != null && statsPanel.activeSelf)
         {
-            if (animationCoroutine != null)
-            {
-                StopCoroutine(animationCoroutine);
-            }
-            animationCoroutine = StartCoroutine(AnimatePanel(false));
-        }
-    }
-
-    /// <summary>
-    /// Corrutina para la animación de entrada y salida del panel.
-    /// </summary>
-    private IEnumerator AnimatePanel(bool fadeIn)
-    {
-        float startAlpha = fadeIn ? 0f : 1f;
-        float endAlpha = fadeIn ? 1f : 0f;
-        float elapsed = 0f;
-
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = startAlpha;
-        }
-
-        while (elapsed < animationDuration)
-        {
-            elapsed += Time.deltaTime;
-            float progress = elapsed / animationDuration;
-            if (canvasGroup != null)
-            {
-                canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, progress);
-            }
-            yield return null;
-        }
-
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = endAlpha;
-        }
-
-        if (!fadeIn && statsPanel != null)
-        {
             statsPanel.SetActive(false);
         }
-    }
-
-    // === MÉTODOS AUXILIARES ===
-
-    private string FormatPuzzleName(string puzzleId)
-    {
-        return puzzleId.Replace("_", " ").Replace("-", " ");
     }
 
     private string FormatTime(float timeInSeconds)
