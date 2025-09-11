@@ -6,7 +6,10 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Samples/Meta XR Interaction SDK OVR Samples/62.0.0/Example Scenes/ComprehensiveRigExample.unity
+    path: Assets/Scenes/LoginScene.unity
+    guid: 78740abae3e85a844ae9e0e8220a4d8d
+  - enabled: 1
+    path: Assets/Scenes/ComprehensiveRigExample.unity
     guid: 2efe93cb8972cae439bfba2dcd4165f0
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: 7f0146f3ac9ee404e9c2f6bb8ae53151, type: 2}

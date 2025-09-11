@@ -12,7 +12,8 @@ public class GridCreator : MonoBehaviour
     private const int PANEL_HEIGHT = 500;
     private const int IMAGE_WIDTH = 725;
     private const int IMAGE_HEIGHT = 725;
-    public UnityEngine.UI.Slider columnsSlider,rowsSlider;
+    public UnityEngine.UI.Slider columnsSlider, rowsSlider;
+
     private void createGrid()
     {
         var cell_x_size = PANEL_WIDTH / columns;
@@ -31,38 +32,53 @@ public class GridCreator : MonoBehaviour
                 gameGrid[x, y].transform.localPosition = new Vector3(-x_offset + x * cell_x_size, -y_offset + y * cell_y_size);
                 gameGrid[x, y].transform.localScale = new Vector3(x_scale, y_scale, 1f);
             }
-
     }
 
     public void OnColumnsSliderValueChange()
     {
-        changeSize(rows, (int)columnsSlider.value);        
+        changeSize(rows, (int)columnsSlider.value);
     }
+
     public void OnRowsSliderValueChange()
     {
         changeSize((int)rowsSlider.value, columns);
     }
 
-    // Start is called before the first frame update
     void Start()
     {
         columnsSlider.onValueChanged.AddListener(delegate { OnColumnsSliderValueChange(); });
         rowsSlider.onValueChanged.AddListener(delegate { OnRowsSliderValueChange(); });
-        createGrid();        
+        createGrid();
     }
 
-    // Update is called once per frame
     void Update()
     {
-        
+
     }
-    public void changeSize(int newRows,int newColumns)
+
+    public void changeSize(int newRows, int newColumns)
     {
+        // Destruir el grid anterior
         for (int y = 0; y < rows; y++)
             for (int x = 0; x < columns; x++)
                 Destroy(gameGrid[x, y]);
+
         rows = newRows;
         columns = newColumns;
         createGrid();
+
+        // NUEVA FUNCIONALIDAD: Notificar al sistema de memoria sobre el cambio
+        MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
+        if (memorySystem != null && memorySystem.IsMemoryModeEnabled())
+        {
+            memorySystem.OnGridSizeChanged(newRows, newColumns);
+        }
+
+        // También notificar al GameGenerator si existe
+        GameGenerator gameGen = FindObjectOfType<GameGenerator>();
+        if (gameGen != null)
+        {
+            gameGen.OnGridSizeChanged(newRows, newColumns);
+        }
     }
 }

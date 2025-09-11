@@ -90,7 +90,27 @@ namespace Oculus.Interaction
                 }
             }
         }
+        public event Action OnGrabbed = delegate { };
+        public event Action OnReleased = delegate { };
 
+        private void AddSelection()
+        {
+            if (_selectorsCount++ == 0)
+            {
+                DisablePhysics();
+                OnGrabbed?.Invoke(); //  Nuevo evento
+            }
+        }
+
+        private void RemoveSelection()
+        {
+            if (--_selectorsCount == 0)
+            {
+                ReenablePhysics();
+                OnReleased?.Invoke(); //  Nuevo evento
+            }
+            _selectorsCount = Mathf.Max(0, _selectorsCount);
+        }
         private void HandlePointerEventRaised(PointerEvent evt)
         {
             switch (evt.Type)
@@ -103,23 +123,6 @@ namespace Oculus.Interaction
                     RemoveSelection();
                     break;
             }
-        }
-
-        private void AddSelection()
-        {
-            if (_selectorsCount++ == 0)
-            {
-                DisablePhysics();
-            }
-        }
-
-        private void RemoveSelection()
-        {
-            if (--_selectorsCount == 0)
-            {
-                ReenablePhysics();
-            }
-            _selectorsCount = Mathf.Max(0, _selectorsCount);
         }
 
         private void DisablePhysics()
