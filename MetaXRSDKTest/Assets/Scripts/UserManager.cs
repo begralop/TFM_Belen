@@ -14,7 +14,6 @@ public class ScoreEntry
     public string date;
     public int cubes;
 
-    // NUEVOS CAMPOS para estadísticas detalladas
     public bool hintsUsed;
     public bool memoryModeUsed;
     public int gridRows;
@@ -24,7 +23,6 @@ public class ScoreEntry
     public float memoryHiddenTime;
     public int hintsActivatedCount;
 
-    // Constructor completo
     public ScoreEntry(float time, int attempts, string date, int cubes,
                      bool hints = false, bool memory = false,
                      int rows = 3, int cols = 3, string puzzle = "",
@@ -44,11 +42,9 @@ public class ScoreEntry
         this.hintsActivatedCount = hintsCount;
     }
 
-    // Constructor de compatibilidad para datos existentes
     public ScoreEntry(float time, int attempts, string date, int cubes)
         : this(time, attempts, date, cubes, false, false, 3, 3, "", 0, 0, 0) { }
 
-    // Constructor más simple
     public ScoreEntry(float time, int attempts, string date)
         : this(time, attempts, date, 0, false, false, 3, 3, "", 0, 0, 0) { }
 }
@@ -120,7 +116,6 @@ public class UserData
     public string CurrentUser;
     public Dictionary<string, Dictionary<string, List<ScoreEntry>>> UserScores = new Dictionary<string, Dictionary<string, List<ScoreEntry>>>();
 
-    // NUEVO: Estadísticas globales por usuario
     public Dictionary<string, UserStatistics> UserStats = new Dictionary<string, UserStatistics>();
 }
 
@@ -149,7 +144,6 @@ public static class UserManager
                 string jsonData = File.ReadAllText(filePath);
                 localUserData = JsonConvert.DeserializeObject<UserData>(jsonData);
 
-                // Asegurarse de que los diccionarios nunca sean nulos
                 if (localUserData.UserScores == null)
                 {
                     localUserData.UserScores = new Dictionary<string, Dictionary<string, List<ScoreEntry>>>();
@@ -178,10 +172,8 @@ public static class UserManager
         File.WriteAllText(GetFilePath(), jsonData);
     }
 
-    // MÉTODO PRINCIPAL ACTUALIZADO para añadir puntuaciones con estadísticas completas
     public static void AddScoreEntry(string username, string puzzleId, ScoreEntry entry)
     {
-        // Asegurar que el usuario existe en el diccionario de puntuaciones
         if (!localUserData.UserScores.ContainsKey(username))
         {
             localUserData.UserScores[username] = new Dictionary<string, List<ScoreEntry>>();
@@ -211,7 +203,6 @@ public static class UserManager
                  $"Grid={entry.gridRows}x{entry.gridColumns}, Fecha={entry.date}");
     }
 
-    // MÉTODOS DE COMPATIBILIDAD con diferentes sobrecargas
     public static void AddScore(string username, string puzzleId, float time, int attempts, int cubes,
                                 bool hints = false, bool memory = false, int rows = 3, int cols = 3)
     {

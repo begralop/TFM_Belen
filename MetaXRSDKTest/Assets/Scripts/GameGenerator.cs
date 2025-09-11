@@ -862,13 +862,10 @@ public class GameGenerator : MonoBehaviour
         currentAttempts = 0;
         resultAlreadyShown = false;
 
-        // IMPORTANTE: Limpiar cualquier efecto de pistas antes de generar
         if (hintSystem != null)
         {
             hintSystem.OnPuzzleChanged();
         }
-
-        UpdateDebugInfo($"Generando juego...");
 
         var grid = GameObject.FindGameObjectWithTag("Grid");
         var curvedBackground = GameObject.FindGameObjectWithTag("curvedBackground");
@@ -904,11 +901,8 @@ public class GameGenerator : MonoBehaviour
                         Renderer[] cubeRenderers = cube.GetComponentsInChildren<Renderer>();
                         if (cubeRenderers != null && cubeRenderers.Length > 0)
                         {
-                            // Verificar que tenemos materiales de otros puzzles
                             if (otherPuzzleMaterials == null || otherPuzzleMaterials.Count == 0)
                             {
-                                UpdateDebugInfo("ERROR CRÍTICO: No hay materiales de otros puzzles!");
-                                UpdateDebugInfo("Intentando regenerar materiales...");
                                 GenerateMaterialsFromPanelImages();
                             }
 
@@ -916,12 +910,10 @@ public class GameGenerator : MonoBehaviour
                             {
                                 if (renderer.name == "Face1")
                                 {
-                                    // Face1 tiene el fragmento correcto del puzzle
                                     renderer.material = materials[r * gridCreator.columns + c];
                                 }
                                 else
                                 {
-                                    // Las otras caras deben tener materiales aleatorios de otros puzzles
                                     if (otherPuzzleMaterials != null && otherPuzzleMaterials.Count > 0)
                                     {
                                         int randomIndex = Random.Range(0, otherPuzzleMaterials.Count);
@@ -929,8 +921,6 @@ public class GameGenerator : MonoBehaviour
                                     }
                                     else
                                     {
-                                        // Si aún no hay materiales, usar el material del propio puzzle como fallback
-                                        UpdateDebugInfo($"FALLBACK: Usando material del puzzle actual para {renderer.name}");
                                         int randomPieceIndex = Random.Range(0, materials.Length);
                                         renderer.material = materials[randomPieceIndex];
                                     }
@@ -965,8 +955,6 @@ public class GameGenerator : MonoBehaviour
                         StartTimer();
                     }
                 }
-
-                UpdateDebugInfo($"Juego generado: {rows}x{columns}");
             }
         }
     }

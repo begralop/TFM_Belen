@@ -166,7 +166,6 @@ public class HintSystem : MonoBehaviour
 
     void ToggleHints()
     {
-        // Si se van a activar las pistas
         if (!hintsEnabled)
         {
             MemoryModeSystem memorySystem = FindObjectOfType<MemoryModeSystem>();
@@ -176,7 +175,6 @@ public class HintSystem : MonoBehaviour
                 memorySystem.ForceDisableMemoryMode();
             }
 
-            // NUEVO: Incrementar contador
             hintsActivationCount++;
             hintsUsedInCurrentGame = true;
         }
@@ -200,7 +198,8 @@ public class HintSystem : MonoBehaviour
     // NUEVO: Métodos públicos para obtener información
     public bool WereHintsUsedThisGame()
     {
-        return hintsUsedInCurrentGame;
+        return hintsUsedInCurrentGame
+            ;
     }
 
     public int GetHintsActivationCount()

@@ -799,12 +799,10 @@ public class MemoryModeSystem : MonoBehaviour
             return;
         }
 
-        // Limpiar cualquier controlador existente antes de crear nuevos
         foreach (var kvp in cubeControllers)
         {
             if (kvp.Value != null && kvp.Key != null)
             {
-                // Verificar si el cubo todavía existe
                 bool cubeStillExists = false;
                 foreach (GameObject cube in cubes)
                 {
@@ -815,7 +813,6 @@ public class MemoryModeSystem : MonoBehaviour
                     }
                 }
 
-                // Si el cubo ya no existe, destruir el controlador
                 if (!cubeStillExists)
                 {
                     Destroy(kvp.Value);
@@ -823,23 +820,19 @@ public class MemoryModeSystem : MonoBehaviour
             }
         }
 
-        // Limpiar el diccionario
         cubeControllers.Clear();
         originalCubeMaterials.Clear();
 
-        // Crear nuevos controladores para todos los cubos
         foreach (GameObject cube in cubes)
         {
             SaveOriginalMaterials(cube);
 
-            // Remover cualquier controlador existente
             CubeMemoryController existingController = cube.GetComponent<CubeMemoryController>();
             if (existingController != null)
             {
                 Destroy(existingController);
             }
 
-            // Crear nuevo controlador
             CubeMemoryController controller = cube.AddComponent<CubeMemoryController>();
 
             float randomOffset = Random.Range(0f, visibleTime + hiddenTime);
